@@ -6,6 +6,10 @@ services:
     environment:
       NODE_ENV: production
       TZ: America/New_York
+      DATA_DIR: /data
+      COOKIE_SECURE: "true"
+    volumes:
+      - kingdom-forge-data:/data
     networks:
       - proxy
     labels:
@@ -18,3 +22,6 @@ services:
 networks:
   proxy:
     external: true
+
+volumes:
+  kingdom-forge-data:

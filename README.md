@@ -5,15 +5,28 @@ Kingdom Forge is a self-hosted fantasy character-sheet dashboard and dice roller
 ## Included
 
 - Responsive purple-and-gold character dashboard
-- Unlimited character creation with automatic local saving
+- Server-backed accounts with a first-user administrator and private player vaults
+- Password hashing, secure session cookies, persistent SQLite storage, and unlimited characters per user
+- Uploadable character portraits kept inside the owning user vault
 - Full Core, Actions, Spells, Inventory, Features, and Notes tabs
 - Character editor for identity, class, level, combat stats, XP, and abilities
+- Guided five-step character builder for Class, Background, Species, Abilities, and Equipment
+- Expandable current-level features plus higher-level progression previews
+- Prepared starter-spell selection for spellcasting classes
+- Species trait browser and 16 selectable 2024 backgrounds
+- Standard array, 4d6-drop-lowest, and validated 27-point-buy score methods
+- All 12 core classes with level-aware subclass choices and 2024 rules progression
+- 4d6-drop-lowest ability rolls plus the standard array during character creation
 - HP controls, temporary HP, short/long rests, hit dice, and death saves
 - Ability, skill, saving-throw, initiative, spell, attack, and damage rolls
+- Optional animated dice, tracked feature uses, attacks-per-action, and critical damage rolls
 - Dice tray supporting compound formulas such as `4d8+1d6-2`
 - Advantage, disadvantage, critical/fumble highlighting, and roll history
 - Spell slots, prepared spells, spell attacks, and casting statistics
 - Editable equipment with quantities, weight, equipped state, and capacity
+- Built-in catalog of common weapons, armor, adventuring gear, and tools
+- Custom weapon and armor importer with physical/elemental damage and automatic equipped AC
+- Optional generated dice-clatter sound
 - Session journal and editable personality, ideals, bonds, and flaws
 - Duplicate, delete, JSON export, and JSON import tools
 - Dockerfile and Portainer-compatible `compose.yaml`
@@ -48,6 +61,10 @@ docker compose up -d --build
 
 ## Saving and backups
 
-This edition automatically saves characters in the browser attached to your Kingdom Forge address. Use **Export JSON** from the character menu for portable backups and **Import** to restore or move a sheet.
+This edition automatically saves characters to the signed-in user's private server vault. The first account registered is the administrator; later registrations are regular players. Use **Export JSON** from the character menu for portable backups and **Import** to restore or move a sheet.
 
-The next server milestone is optional multi-user PostgreSQL storage, accounts, campaign sharing, and a live DM party view. The current local-vault edition requires no database and is ideal for one owner or one device.
+Account data lives in the `kingdom-forge-data` Docker volume. Back up that volume before server migrations. Campaign sharing and a live DM party view remain future milestones.
+
+## Rules note
+
+The built-in progression follows the revised 2024 Free Rules/Player's Handbook structure used in 2025–2026 play. It includes concise feature names and mechanics rather than reproducing copyrighted book text. Always use the rules source selected by your campaign and DM.
