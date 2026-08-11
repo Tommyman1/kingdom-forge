@@ -1,0 +1,20 @@
+services:
+  kingdom-forge:
+    build: .
+    container_name: kingdom-forge
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: America/New_York
+    networks:
+      - proxy
+    labels:
+      homepage.group: D&D
+      homepage.name: Kingdom Forge
+      homepage.description: Character sheets and dice roller
+      homepage.icon: mdi-dice-d20
+      homepage.href: https://kingdom-forge-tail.kingdom.local
+
+networks:
+  proxy:
+    external: true
