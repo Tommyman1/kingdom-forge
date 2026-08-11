@@ -1,6 +1,9 @@
 services:
   kingdom-forge:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kingdom-forge:2.0.0
     container_name: kingdom-forge
     restart: unless-stopped
     environment:
@@ -9,12 +12,10 @@ services:
       DATA_DIR: /data
       COOKIE_SECURE: "true"
       BACKUP_RETENTION: "14"
-    ports:
-      - "3000:3000"
     volumes:
       - kingdom-forge-data:/data
     networks:
-      - kingdom-forge
+      - proxy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 30s
@@ -24,13 +25,13 @@ services:
     labels:
       homepage.group: D&D
       homepage.name: Kingdom Forge
-      homepage.description: Character sheets and dice roller
+      homepage.description: Character sheets, campaigns, and animated dice
       homepage.icon: mdi-dice-d20
       homepage.href: https://kingdom-forge-tail.kingdom.local
 
 networks:
-  kingdom-forge:
-    name: kingdom-forge
+  proxy:
+    external: true
 
 volumes:
   kingdom-forge-data:

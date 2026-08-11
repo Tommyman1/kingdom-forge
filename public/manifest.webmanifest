@@ -1,0 +1,10 @@
+{
+  "name": "Kingdom Forge",
+  "short_name": "Forge",
+  "description": "Self-hosted character sheets, campaigns, encounters, homebrew, and 3D dice.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0b15",
+  "theme_color": "#6d4c9f",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

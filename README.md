@@ -1,9 +1,36 @@
 # Kingdom Forge
 
+## Version 2.0
+
+Kingdom Forge 2.0 is the cumulative, Portainer-ready campaign platform. It retains every 1.x feature and adds live campaign rolls, DM roll requests, campaign access roles, feat advancement, automatic class resources, map upload/grid/fog/fullscreen controls, rules inspection, print/PDF output, accessibility preferences, session security, rate limiting, audit history, diagnostics, health checks, scheduled backups, schema migrations, character validation, ruleset separation, and persistent save status.
+
+Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
+
+## Licensing and rules content
+
+Bundled rules data must remain limited to open-license SRD material and original Kingdom Forge/Wall Gloria content. Private imports and homebrew remain private user data. Do not redistribute paid D&D Beyond text or artwork.
+
+## Previous 1.1 additions
+
+This cumulative release includes everything from 1.0 plus:
+
+- configurable class and homebrew resource counters with short/long-rest recovery
+- focused table mode for quick play on phones, tablets, and a shared display
+- per-character restore points with one-click rollback
+- existing JSON character export/import and full account backup remain supported
+- automated rest recovery now restores tracked resources as well as HP, hit dice, and spell slots
+
+The campaign, character builder, milestone/XP advancement, ASI choices, inventory/armor AC, spell and feature tracking, accounts/admin tools, homebrew, encounters, Three.js multi-dice roller, critical damage, and PWA support from 1.0 are all retained.
+
 Kingdom Forge is a self-hosted fantasy character-sheet dashboard and dice roller. This starter contains the finished visual foundation for the app and is ready to open in Visual Studio Code.
 
 ## Included
 
+- Shared campaigns with DM/player roles, invite codes, and live character syncing
+- Campaign command center with party inventory, encounters, initiative, journals, quests, NPCs, factions, and a lightweight map board
+- Searchable compendium and account-scoped Homebrew Forge
+- Administrator role management, registration controls, account backups, and SQLite database backups
+- Installable mobile PWA with offline shell support
 - Responsive purple-and-gold character dashboard
 - Server-backed accounts with a first-user administrator and private player vaults
 - Password hashing, secure session cookies, persistent SQLite storage, and unlimited characters per user
@@ -19,7 +46,10 @@ Kingdom Forge is a self-hosted fantasy character-sheet dashboard and dice roller
 - 4d6-drop-lowest ability rolls plus the standard array during character creation
 - HP controls, temporary HP, short/long rests, hit dice, and death saves
 - Ability, skill, saving-throw, initiative, spell, attack, and damage rolls
-- Optional animated dice, tracked feature uses, attacks-per-action, and critical damage rolls
+- Optional Three.js WebGL d20 animation, tracked feature uses, attacks-per-action, and critical damage rolls
+- Multi-click mixed dice pools with up to 24 simultaneous Three.js dice on screen
+- Milestone or XP advancement with HP selection, feature unlocks, history, and real Ability Score Improvement choices
+- Conditions, concentration, and exhaustion tracking
 - Dice tray supporting compound formulas such as `4d8+1d6-2`
 - Advantage, disadvantage, critical/fumble highlighting, and roll history
 - Spell slots, prepared spells, spell attacks, and casting statistics

@@ -1,6 +1,14 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   attacksPerAction,
   CLASS_RULES,
@@ -9,10 +17,20 @@ import {
   STANDARD_ARRAY,
 } from "../lib/rules2024";
 import GuidedEditor from "./GuidedEditor";
+import LevelUpWizard from "./LevelUpWizard";
+import {
+  AdminHub,
+  CampaignHub,
+  CompendiumHub,
+  HomebrewHub,
+  type HomebrewEntry,
+} from "./KingdomTools";
+const ThreeDice = lazy(() => import("./ThreeDice"));
 
 export type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type Tab = "core" | "actions" | "spells" | "inventory" | "features" | "notes";
 type RollMode = "normal" | "advantage" | "disadvantage";
+type AppView = "characters" | "campaigns" | "compendium" | "homebrew" | "settings" | "admin";
 type Roll = {
   id: number;
   label: string;
@@ -22,6 +40,7 @@ type Roll = {
   critical?: boolean;
   fumble?: boolean;
 };
+type AnimatedRoll = { total: number; dice: { sides: number; value: number }[] };
 export type Item = {
   id: number;
   name: string;
@@ -87,7 +106,33 @@ export type Hero = {
   usedFeatures: Record<string, boolean>;
   portrait?: string;
   baseAc?: number;
+  advancementMethod?: "milestone" | "xp";
+  levelHistory?: {
+    level: number;
+    date: string;
+    method: "milestone" | "xp";
+    hpGain: number;
+    abilityChanges: string;
+  }[];
+  conditions?: string[];
+  concentration?: boolean;
+  exhaustion?: number;
+  resources?: {
+    id: number;
+    name: string;
+    current: number;
+    max: number;
+    resetsOn: "short" | "long";
+  }[];
+  feats?: { id: number; name: string; description: string }[];
+  classes?: { name: string; level: number; subclass?: string }[];
+  ruleset?: "SRD 5.1" | "2024 SRD" | "Wall Gloria" | "Homebrew";
+  resistances?: string[];
+  immunities?: string[];
+  vulnerabilities?: string[];
 };
+
+type HeroSnapshot = { id: number; heroId: number; savedAt: string; hero: Hero };
 
 const abilities: { key: AbilityKey; label: string }[] = [
   { key: "str", label: "STR" },
@@ -156,6 +201,16 @@ function makeHero(id = Date.now()): Hero {
     deathSuccess: 0,
     deathFail: 0,
     usedFeatures: {},
+    conditions: [],
+    concentration: false,
+    exhaustion: 0,
+    resources: [],
+    feats: [],
+    classes: [{ name: "Fighter", level: 1 }],
+    ruleset: "2024 SRD",
+    resistances: [],
+    immunities: [],
+    vulnerabilities: [],
     spellSlots: {
       1: { used: 0, max: 0 },
       2: { used: 0, max: 0 },
@@ -314,23 +369,38 @@ function calculatedAc(hero: Hero) {
     : (hero.baseAc ?? 10) + dex;
   return bodyAc + shield;
 }
+function castingAbility(hero: Hero): AbilityKey {
+  const primary = CLASS_RULES[hero.className]?.primary ?? "Charisma";
+  if (primary.includes("Intelligence")) return "int";
+  if (primary.includes("Wisdom")) return "wis";
+  return "cha";
+}
 
 export default function Home() {
   const [account, setAccount] = useState<Account | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [heroes, setHeroes] = useState<Hero[]>(initialHeroes);
+  const [view, setView] = useState<AppView>("characters");
+  const [homebrew, setHomebrew] = useState<HomebrewEntry[]>([]);
   const [selectedId, setSelectedId] = useState(1);
   const [activeTab, setActiveTab] = useState<Tab>("core");
   const [rollMode, setRollMode] = useState<RollMode>("normal");
   const [formula, setFormula] = useState("1d20+4");
   const [rolls, setRolls] = useState<Roll[]>([]);
   const [showEditor, setShowEditor] = useState(false);
+  const [showLevelUp, setShowLevelUp] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [toast, setToast] = useState("");
   const [ready, setReady] = useState(false);
   const [diceAnimation, setDiceAnimation] = useState(true);
   const [diceSound, setDiceSound] = useState(true);
-  const [animatedTotal, setAnimatedTotal] = useState<number | null>(null);
+  const [animatedRoll, setAnimatedRoll] = useState<AnimatedRoll | null>(null);
+  const [tableMode, setTableMode] = useState(false);
+  const [snapshots, setSnapshots] = useState<HeroSnapshot[]>([]);
+  const [accessibility, setAccessibility] = useState({ reducedMotion: false, highContrast: false, largeText: false });
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const hero = useMemo(
     () => heroes.find((item) => item.id === selectedId) ?? heroes[0],
@@ -363,6 +433,9 @@ export default function Home() {
             setDiceAnimation(saved.diceAnimation);
           if (typeof saved.diceSound === "boolean")
             setDiceSound(saved.diceSound);
+          if (Array.isArray(saved.homebrew)) setHomebrew(saved.homebrew);
+          if (Array.isArray(saved.snapshots)) setSnapshots(saved.snapshots);
+          if (saved.accessibility) setAccessibility({ reducedMotion: false, highContrast: false, largeText: false, ...saved.accessibility });
         }
       } catch {
         setToast("Could not reach the account server");
@@ -372,18 +445,34 @@ export default function Home() {
       }
     })();
   }, []);
+  useEffect(() => {
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production")
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!ready || !account) return;
     const timer = window.setTimeout(() => {
+      setSaveState("saving");
       fetch("/api/vault", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ heroes, selectedId, diceAnimation, diceSound }),
-      }).catch(() => setToast("Account save failed"));
+        body: JSON.stringify({
+          heroes,
+          selectedId,
+          diceAnimation,
+          diceSound,
+          homebrew,
+          snapshots,
+          accessibility,
+        }),
+      }).then((response) => {
+        if (!response.ok) throw new Error("save failed");
+        setSaveState("saved");
+      }).catch(() => { setSaveState("error"); setToast("Account save failed"); });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [heroes, selectedId, diceAnimation, diceSound, ready, account]);
+  }, [heroes, selectedId, diceAnimation, diceSound, homebrew, snapshots, accessibility, ready, account]);
   useEffect(() => {
     if (ready)
       window.localStorage.setItem(
@@ -396,6 +485,14 @@ export default function Home() {
     const timer = window.setTimeout(() => setToast(""), 2200);
     return () => window.clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setCommandOpen((value) => !value); }
+      if (event.key === "Escape") setCommandOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   function updateHero(patch: Partial<Hero>) {
     setHeroes((items) =>
@@ -456,6 +553,11 @@ export default function Home() {
         hero.hp + Math.max(1, Math.floor(hero.maxHp / 4)),
       ),
       hitDice: Math.max(0, hero.hitDice - 1),
+      resources: (hero.resources ?? []).map((resource) =>
+        resource.resetsOn === "short"
+          ? { ...resource, current: resource.max }
+          : resource,
+      ),
     });
     setToast("Short rest complete");
   }
@@ -475,8 +577,32 @@ export default function Home() {
           { ...slot, used: 0 },
         ]),
       ),
+      resources: (hero.resources ?? []).map((resource) => ({
+        ...resource,
+        current: resource.max,
+      })),
     });
     setToast("Long rest complete");
+  }
+
+  function saveRestorePoint() {
+    setSnapshots((items) =>
+      [
+        { id: Date.now(), heroId: hero.id, savedAt: new Date().toISOString(), hero: structuredClone(hero) },
+        ...items,
+      ].slice(0, 30),
+    );
+    setShowMenu(false);
+    setToast("Restore point saved");
+  }
+
+  function restoreLatest() {
+    const snapshot = snapshots.find((item) => item.heroId === hero.id);
+    if (!snapshot) return setToast("No restore point exists for this character");
+    if (!window.confirm(`Restore ${hero.name} to ${new Date(snapshot.savedAt).toLocaleString()}?`)) return;
+    updateHero({ ...structuredClone(snapshot.hero), id: hero.id });
+    setShowMenu(false);
+    setToast("Character restored");
   }
 
   function parseAndRoll(
@@ -493,6 +619,7 @@ export default function Home() {
     }
     let total = 0;
     const parts: string[] = [];
+    const animatedDice: AnimatedRoll["dice"] = [];
     let firstD20: number | undefined;
     for (const raw of terms) {
       const sign = raw.startsWith("-") ? -1 : 1;
@@ -510,6 +637,7 @@ export default function Home() {
           { length: count },
           () => Math.floor(Math.random() * sides) + 1,
         );
+        animatedDice.push(...values.map((value) => ({ sides, value })));
         if (sides === 20 && count === 1 && mode !== "normal") {
           const extra = Math.floor(Math.random() * 20) + 1;
           values = [values[0], extra];
@@ -549,8 +677,8 @@ export default function Home() {
     );
     if (diceSound) playDiceSound();
     if (diceAnimation) {
-      setAnimatedTotal(total);
-      window.setTimeout(() => setAnimatedTotal(null), 950);
+      setAnimatedRoll({ total, dice: animatedDice.slice(0, 24) });
+      window.setTimeout(() => setAnimatedRoll(null), 1850);
     }
   }
 
@@ -566,6 +694,33 @@ export default function Home() {
     URL.revokeObjectURL(url);
     setShowMenu(false);
     setToast("Character exported");
+  }
+  function exportVault() {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            heroes,
+            selectedId,
+            homebrew,
+            diceAnimation,
+            diceSound,
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `kingdom-forge-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setToast("Account backup exported");
   }
   function importHero(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -637,19 +792,21 @@ export default function Home() {
   if (!account) return <AuthGate onAuthenticated={setAccount} />;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${tableMode ? "table-mode" : ""} ${accessibility.reducedMotion ? "reduced-motion" : ""} ${accessibility.highContrast ? "high-contrast" : ""} ${accessibility.largeText ? "large-text" : ""}`}>
       {toast && (
         <div className="toast" role="status">
           ✦ {toast}
         </div>
       )}
-      {animatedTotal !== null && (
-        <div className="dice-animation-stage" aria-live="polite">
-          <div className="animated-d20">
-            <span>{animatedTotal}</span>
-          </div>
-        </div>
+      {animatedRoll !== null && (
+        <Suspense fallback={<div className="dice-animation-stage" />}>
+          <ThreeDice total={animatedRoll.total} dice={animatedRoll.dice} />
+        </Suspense>
       )}
+      {commandOpen && <div className="command-backdrop" onClick={() => setCommandOpen(false)}><section className="command-palette" onClick={(event) => event.stopPropagation()}><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Search characters and tools…" />{[
+        ...(["characters", "campaigns", "compendium", "homebrew", "settings"] as AppView[]).map((target) => ({ label: `Open ${target}`, run: () => setView(target) })),
+        ...heroes.map((item) => ({ label: `Character · ${item.name}`, run: () => { setView("characters"); setSelectedId(item.id); } })),
+      ].filter((item) => item.label.toLowerCase().includes(commandQuery.toLowerCase())).map((item) => <button key={item.label} onClick={() => { item.run(); setCommandOpen(false); setCommandQuery(""); }}>{item.label}<span>↵</span></button>)}</section></div>}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">K</div>
@@ -659,23 +816,45 @@ export default function Home() {
           </div>
         </div>
         <nav aria-label="Main navigation">
-          <button className="nav-item active">
+          <button className="nav-item" onClick={() => setCommandOpen(true)}><span>⌕</span> Quick Find <small>⌘K</small></button>
+          <button
+            className={`nav-item ${view === "characters" ? "active" : ""}`}
+            onClick={() => setView("characters")}
+          >
             <span>◆</span> Characters
           </button>
-          <button className="nav-item">
-            <span>⚔</span> Campaigns <small>Soon</small>
+          <button
+            className={`nav-item ${view === "campaigns" ? "active" : ""}`}
+            onClick={() => setView("campaigns")}
+          >
+            <span>⚔</span> Campaigns
           </button>
-          <button className="nav-item">
-            <span>✦</span> Compendium <small>Soon</small>
+          <button
+            className={`nav-item ${view === "compendium" ? "active" : ""}`}
+            onClick={() => setView("compendium")}
+          >
+            <span>✦</span> Compendium
           </button>
-          <button className="nav-item">
-            <span>◈</span> Homebrew <small>Soon</small>
+          <button
+            className={`nav-item ${view === "homebrew" ? "active" : ""}`}
+            onClick={() => setView("homebrew")}
+          >
+            <span>◈</span> Homebrew
           </button>
+          <button className={`nav-item ${view === "settings" ? "active" : ""}`} onClick={() => setView("settings")}><span>⚙</span> Settings</button>
+          {account.role === "admin" && (
+            <button
+              className={`nav-item ${view === "admin" ? "active" : ""}`}
+              onClick={() => setView("admin")}
+            >
+              <span>♛</span> Admin
+            </button>
+          )}
         </nav>
         <div className="sidebar-callout">
           <span>✦</span>
           <strong>Local Vault</strong>
-          <p>Your characters autosave privately on this device.</p>
+          <p>{saveState === "saving" ? "Saving changes…" : saveState === "error" ? "Save failed — check connection" : "All changes saved"}</p>
         </div>
         <div className="sidebar-footer">
           <div className="avatar small">{initials(account.displayName)}</div>
@@ -697,282 +876,345 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p>THE GREAT HALL</p>
-            <h1>Your Characters</h1>
-          </div>
-          <div className="top-actions">
-            <button
-              className="secondary"
-              onClick={() => importRef.current?.click()}
-            >
-              Import
-            </button>
-            <input
-              ref={importRef}
-              type="file"
-              accept="application/json"
-              hidden
-              onChange={importHero}
-            />
-            <button className="primary" onClick={createHero}>
-              ＋ Create Character
-            </button>
-          </div>
-        </header>
-        <div className="character-strip" aria-label="Character list">
-          {heroes.map((item) => (
-            <button
-              key={item.id}
-              className={`hero-chip ${hero.id === item.id ? "selected" : ""}`}
-              onClick={() => {
-                setSelectedId(item.id);
-                setActiveTab("core");
-              }}
-            >
-              <div className="avatar">{item.initials}</div>
+        {view === "characters" ? (
+          <>
+            <header className="topbar">
               <div>
-                <strong>{item.name}</strong>
-                <span>
-                  Level {item.level} {item.className}
-                </span>
+                <p>THE GREAT HALL</p>
+                <h1>Your Characters</h1>
               </div>
-              <i
-                style={{
-                  width: `${Math.max(0, (item.hp / item.maxHp) * 100)}%`,
-                }}
-              />
-            </button>
-          ))}
-          <button className="new-chip" onClick={createHero}>
-            ＋<span>New hero</span>
-          </button>
-        </div>
-
-        <div className="content-grid">
-          <section className="sheet-card">
-            <div className="sheet-hero">
-              <button
-                className={`inspiration ${hero.inspiration ? "lit" : ""}`}
-                onClick={() => updateHero({ inspiration: !hero.inspiration })}
-                title="Toggle inspiration"
-              >
-                ✦
-              </button>
-              <div className={`portrait ${hero.portrait ? "has-image" : ""}`}>
-                {hero.portrait ? (
-                  <img src={hero.portrait} alt={`${hero.name} portrait`} />
-                ) : (
-                  hero.initials
-                )}
-              </div>
-              <div className="identity">
-                <p>
-                  LEVEL {hero.level} · {hero.ancestry} · {hero.background}
-                </p>
-                <h2>{hero.name}</h2>
-                <span>
-                  {hero.subclass || hero.className}{" "}
-                  {hero.subclass && `· ${hero.className}`}
-                </span>
-              </div>
-              <div className="sheet-tools">
-                <button className="ghost" onClick={() => setShowEditor(true)}>
-                  Edit Sheet
-                </button>
-                <div className="more-wrap">
-                  <button
-                    className="more"
-                    onClick={() => setShowMenu(!showMenu)}
-                    aria-label="Character options"
-                  >
-                    •••
-                  </button>
-                  {showMenu && (
-                    <div className="dropdown">
-                      <button onClick={duplicateHero}>Duplicate</button>
-                      <button onClick={exportHero}>Export JSON</button>
-                      <button className="danger" onClick={deleteHero}>
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="xp-bar">
-              <span>XP {hero.xp.toLocaleString()}</span>
-              <i>
-                <b
-                  style={{
-                    width: `${Math.min(100, (hero.xp / Math.max(300, hero.level * hero.level * 1000)) * 100)}%`,
-                  }}
-                />
-              </i>
-              <span>LEVEL {hero.level + 1}</span>
-            </div>
-            <div className="combat-row">
-              <div>
-                <span>ARMOR CLASS</span>
-                <strong>{calculatedAc(hero)}</strong>
-                <small>equipped gear</small>
-              </div>
-              <div>
-                <span>INITIATIVE</span>
+              <div className="top-actions">
                 <button
-                  onClick={() =>
-                    parseAndRoll(
-                      `1d20${signed(mod(hero.abilities.dex))}`,
-                      "Initiative",
-                    )
-                  }
+                  className="secondary"
+                  onClick={() => importRef.current?.click()}
                 >
-                  {signed(mod(hero.abilities.dex))}
+                  Import
+                </button>
+                <button className="secondary" onClick={exportVault}>
+                  Backup All
+                </button>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept="application/json"
+                  hidden
+                  onChange={importHero}
+                />
+                <button className="primary" onClick={createHero}>
+                  ＋ Create Character
                 </button>
               </div>
-              <div>
-                <span>SPEED</span>
-                <strong>
-                  {hero.speed}
-                  <small> ft</small>
-                </strong>
-              </div>
-              <div className="hp">
-                <span>HIT POINTS</span>
-                <div className="hp-number">
-                  <button onClick={() => applyHp(-1)}>−</button>
-                  <strong>
-                    {hero.hp} <small>/ {hero.maxHp}</small>
-                  </strong>
-                  <button onClick={() => applyHp(1)}>＋</button>
-                </div>
-                <div className="hp-track">
+            </header>
+            <div className="character-strip" aria-label="Character list">
+              {heroes.map((item) => (
+                <button
+                  key={item.id}
+                  className={`hero-chip ${hero.id === item.id ? "selected" : ""}`}
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    setActiveTab("core");
+                  }}
+                >
+                  <div className="avatar">{item.initials}</div>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>
+                      Level {item.level} {item.className}
+                    </span>
+                  </div>
                   <i
                     style={{
-                      width: `${Math.max(0, (hero.hp / hero.maxHp) * 100)}%`,
+                      width: `${Math.max(0, (item.hp / item.maxHp) * 100)}%`,
                     }}
                   />
-                </div>
-              </div>
-            </div>
-            <div className="resource-row">
-              <button
-                onClick={() =>
-                  updateHero({ tempHp: Math.max(0, hero.tempHp - 1) })
-                }
-              >
-                <span>TEMP HP</span>
-                <strong>{hero.tempHp}</strong>
-              </button>
-              <button onClick={shortRest}>
-                <span>HIT DICE</span>
-                <strong>
-                  {hero.hitDice}/{hero.maxHitDice}
-                </strong>
-                <small>Short Rest</small>
-              </button>
-              <button onClick={longRest}>
-                <span>REST</span>
-                <strong>☾</strong>
-                <small>Long Rest</small>
-              </button>
-              <div className="death-saves">
-                <span>DEATH SAVES</span>
-                <label>
-                  Success{" "}
-                  {[0, 1, 2].map((index) => (
-                    <button
-                      key={index}
-                      className={hero.deathSuccess > index ? "success" : ""}
-                      onClick={() =>
-                        updateHero({
-                          deathSuccess:
-                            hero.deathSuccess === index + 1 ? index : index + 1,
-                        })
-                      }
-                    />
-                  ))}
-                </label>
-                <label>
-                  Failure{" "}
-                  {[0, 1, 2].map((index) => (
-                    <button
-                      key={index}
-                      className={hero.deathFail > index ? "failure" : ""}
-                      onClick={() =>
-                        updateHero({
-                          deathFail:
-                            hero.deathFail === index + 1 ? index : index + 1,
-                        })
-                      }
-                    />
-                  ))}
-                </label>
-              </div>
-            </div>
-            <div className="tabs" role="tablist">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  className={activeTab === tab.key ? "active" : ""}
-                  onClick={() => setActiveTab(tab.key)}
-                >
-                  {tab.label}
                 </button>
               ))}
+              <button className="new-chip" onClick={createHero}>
+                ＋<span>New hero</span>
+              </button>
             </div>
 
-            <div className="tab-content">
-              {activeTab === "core" && (
-                <CoreTab
-                  hero={hero}
-                  proficiencyBonus={proficiencyBonus}
-                  skillBonus={skillBonus}
-                  onRoll={parseAndRoll}
-                />
-              )}
-              {activeTab === "actions" && (
-                <ActionsTab
-                  hero={hero}
-                  proficiencyBonus={proficiencyBonus}
-                  updateHero={updateHero}
-                  onRoll={parseAndRoll}
-                />
-              )}
-              {activeTab === "spells" && (
-                <SpellsTab
-                  hero={hero}
-                  updateHero={updateHero}
-                  onRoll={parseAndRoll}
-                />
-              )}
-              {activeTab === "inventory" && (
-                <InventoryTab hero={hero} updateHero={updateHero} />
-              )}
-              {activeTab === "features" && (
-                <FeaturesTab hero={hero} updateHero={updateHero} />
-              )}
-              {activeTab === "notes" && (
-                <NotesTab hero={hero} updateHero={updateHero} />
-              )}
-            </div>
-          </section>
+            <div className="content-grid">
+              <section className="sheet-card">
+                <div className="sheet-hero">
+                  <button
+                    className={`inspiration ${hero.inspiration ? "lit" : ""}`}
+                    onClick={() =>
+                      updateHero({ inspiration: !hero.inspiration })
+                    }
+                    title="Toggle inspiration"
+                  >
+                    ✦
+                  </button>
+                  <div
+                    className={`portrait ${hero.portrait ? "has-image" : ""}`}
+                  >
+                    {hero.portrait ? (
+                      <img src={hero.portrait} alt={`${hero.name} portrait`} />
+                    ) : (
+                      hero.initials
+                    )}
+                  </div>
+                  <div className="identity">
+                    <p>
+                      LEVEL {hero.level} · {hero.ancestry} · {hero.background}
+                    </p>
+                    <h2>{hero.name}</h2>
+                    <span>
+                      {hero.classes && hero.classes.length > 1
+                        ? hero.classes.map((entry) => `${entry.name} ${entry.level}`).join(" · ")
+                        : <>{hero.subclass || hero.className}{" "}{hero.subclass && `· ${hero.className}`}</>}
+                    </span>
+                  </div>
+                  <div className="sheet-tools">
+                    <button
+                      className="ghost"
+                      onClick={() => setShowLevelUp(true)}
+                    >
+                      Level Up
+                    </button>
+                    <button
+                      className="ghost"
+                      onClick={() => setShowEditor(true)}
+                    >
+                      Edit Sheet
+                    </button>
+                    <button className="ghost table-toggle" onClick={() => setTableMode(!tableMode)}>
+                      {tableMode ? "Full Sheet" : "Table Mode"}
+                    </button>
+                    <div className="more-wrap">
+                      <button
+                        className="more"
+                        onClick={() => setShowMenu(!showMenu)}
+                        aria-label="Character options"
+                      >
+                        •••
+                      </button>
+                      {showMenu && (
+                        <div className="dropdown">
+                          <button onClick={duplicateHero}>Duplicate</button>
+                          <button onClick={exportHero}>Export JSON</button>
+                          <button onClick={() => { setShowMenu(false); window.print(); }}>Print / Save PDF</button>
+                          <button onClick={saveRestorePoint}>Save Restore Point</button>
+                          <button onClick={restoreLatest}>Restore Previous</button>
+                          <button className="danger" onClick={deleteHero}>
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="xp-bar">
+                  <span>XP {hero.xp.toLocaleString()}</span>
+                  <i>
+                    <b
+                      style={{
+                        width: `${Math.min(100, (hero.xp / Math.max(300, hero.level * hero.level * 1000)) * 100)}%`,
+                      }}
+                    />
+                  </i>
+                  <span>LEVEL {hero.level + 1}</span>
+                </div>
+                <div className="combat-row">
+                  <div>
+                    <span>ARMOR CLASS</span>
+                    <strong>{calculatedAc(hero)}</strong>
+                    <small>equipped gear</small>
+                  </div>
+                  <div>
+                    <span>INITIATIVE</span>
+                    <button
+                      onClick={() =>
+                        parseAndRoll(
+                          `1d20${signed(mod(hero.abilities.dex))}`,
+                          "Initiative",
+                        )
+                      }
+                    >
+                      {signed(mod(hero.abilities.dex))}
+                    </button>
+                  </div>
+                  <div>
+                    <span>SPEED</span>
+                    <strong>
+                      {hero.speed}
+                      <small> ft</small>
+                    </strong>
+                  </div>
+                  <div className="hp">
+                    <span>HIT POINTS</span>
+                    <div className="hp-number">
+                      <button onClick={() => applyHp(-1)}>−</button>
+                      <strong>
+                        {hero.hp} <small>/ {hero.maxHp}</small>
+                      </strong>
+                      <button onClick={() => applyHp(1)}>＋</button>
+                    </div>
+                    <div className="hp-track">
+                      <i
+                        style={{
+                          width: `${Math.max(0, (hero.hp / hero.maxHp) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <details className="rules-inspector">
+                  <summary>Rules Inspector · explain my numbers</summary>
+                  <div>
+                    <article><b>Armor Class {calculatedAc(hero)}</b><span>Base/armor + Dexterity allowance + shield and equipment bonuses</span></article>
+                    <article><b>Initiative {signed(mod(hero.abilities.dex))}</b><span>Dexterity modifier from score {hero.abilities.dex}</span></article>
+                    <article><b>Proficiency +{proficiencyBonus}</b><span>Calculated from total character level {hero.level}</span></article>
+                    <article><b>Spell save DC {8 + proficiencyBonus + mod(hero.abilities[castingAbility(hero)])}</b><span>8 + proficiency + {castingAbility(hero).toUpperCase()} modifier</span></article>
+                  </div>
+                </details>
+                <div className="resource-row">
+                  <button
+                    onClick={() =>
+                      updateHero({ tempHp: Math.max(0, hero.tempHp - 1) })
+                    }
+                  >
+                    <span>TEMP HP</span>
+                    <strong>{hero.tempHp}</strong>
+                  </button>
+                  <button onClick={shortRest}>
+                    <span>HIT DICE</span>
+                    <strong>
+                      {hero.hitDice}/{hero.maxHitDice}
+                    </strong>
+                    <small>Short Rest</small>
+                  </button>
+                  <button onClick={longRest}>
+                    <span>REST</span>
+                    <strong>☾</strong>
+                    <small>Long Rest</small>
+                  </button>
+                  <div className="death-saves">
+                    <span>DEATH SAVES</span>
+                    <label>
+                      Success{" "}
+                      {[0, 1, 2].map((index) => (
+                        <button
+                          key={index}
+                          className={hero.deathSuccess > index ? "success" : ""}
+                          onClick={() =>
+                            updateHero({
+                              deathSuccess:
+                                hero.deathSuccess === index + 1
+                                  ? index
+                                  : index + 1,
+                            })
+                          }
+                        />
+                      ))}
+                    </label>
+                    <label>
+                      Failure{" "}
+                      {[0, 1, 2].map((index) => (
+                        <button
+                          key={index}
+                          className={hero.deathFail > index ? "failure" : ""}
+                          onClick={() =>
+                            updateHero({
+                              deathFail:
+                                hero.deathFail === index + 1
+                                  ? index
+                                  : index + 1,
+                            })
+                          }
+                        />
+                      ))}
+                    </label>
+                  </div>
+                  {(hero.resources ?? []).map((resource) => (
+                    <div className="tracked-resource" key={resource.id}>
+                      <span>{resource.name.toUpperCase()}</span>
+                      <div>
+                        <button onClick={() => updateHero({ resources: hero.resources?.map((item) => item.id === resource.id ? { ...item, current: Math.max(0, item.current - 1) } : item) })}>−</button>
+                        <strong>{resource.current}/{resource.max}</strong>
+                        <button onClick={() => updateHero({ resources: hero.resources?.map((item) => item.id === resource.id ? { ...item, current: Math.min(item.max, item.current + 1) } : item) })}>＋</button>
+                      </div>
+                      <small>{resource.resetsOn} rest</small>
+                    </div>
+                  ))}
+                </div>
+                <div className="tabs" role="tablist">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={activeTab === tab.key ? "active" : ""}
+                      onClick={() => setActiveTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-          <DicePanel
-            formula={formula}
-            setFormula={setFormula}
-            mode={rollMode}
-            setMode={setRollMode}
-            rolls={rolls}
-            setRolls={setRolls}
-            onRoll={parseAndRoll}
-            animation={diceAnimation}
-            setAnimation={setDiceAnimation}
-            sound={diceSound}
-            setSound={setDiceSound}
-          />
-        </div>
+                <div className="tab-content">
+                  {activeTab === "core" && (
+                    <CoreTab
+                      hero={hero}
+                      proficiencyBonus={proficiencyBonus}
+                      skillBonus={skillBonus}
+                      onRoll={parseAndRoll}
+                    />
+                  )}
+                  {activeTab === "actions" && (
+                    <ActionsTab
+                      hero={hero}
+                      proficiencyBonus={proficiencyBonus}
+                      updateHero={updateHero}
+                      onRoll={parseAndRoll}
+                    />
+                  )}
+                  {activeTab === "spells" && (
+                    <SpellsTab
+                      hero={hero}
+                      updateHero={updateHero}
+                      onRoll={parseAndRoll}
+                    />
+                  )}
+                  {activeTab === "inventory" && (
+                    <InventoryTab hero={hero} updateHero={updateHero} />
+                  )}
+                  {activeTab === "features" && (
+                    <FeaturesTab hero={hero} updateHero={updateHero} />
+                  )}
+                  {activeTab === "notes" && (
+                    <NotesTab hero={hero} updateHero={updateHero} />
+                  )}
+                </div>
+              </section>
+
+              <DicePanel
+                formula={formula}
+                setFormula={setFormula}
+                mode={rollMode}
+                setMode={setRollMode}
+                rolls={rolls}
+                setRolls={setRolls}
+                onRoll={parseAndRoll}
+                animation={diceAnimation}
+                setAnimation={setDiceAnimation}
+                sound={diceSound}
+                setSound={setDiceSound}
+              />
+            </div>
+            <ConditionTracker hero={hero} updateHero={updateHero} />
+            <ResourceManager hero={hero} updateHero={updateHero} />
+          </>
+        ) : view === "campaigns" ? (
+          <CampaignHub hero={hero} toast={setToast} />
+        ) : view === "compendium" ? (
+          <CompendiumHub />
+        ) : view === "homebrew" ? (
+          <HomebrewHub entries={homebrew} setEntries={setHomebrew} />
+        ) : view === "settings" ? (
+          <AccountSettings accessibility={accessibility} setAccessibility={setAccessibility} toast={setToast} />
+        ) : (
+          <AdminHub />
+        )}
       </section>
       {showEditor && (
         <GuidedEditor
@@ -990,8 +1232,90 @@ export default function Home() {
           }}
         />
       )}
+      {showLevelUp && (
+        <LevelUpWizard
+          hero={hero}
+          onClose={() => setShowLevelUp(false)}
+          onApply={(patch) => {
+            updateHero(patch);
+            setShowLevelUp(false);
+            setToast(`Advanced to level ${patch.level}`);
+          }}
+        />
+      )}
     </main>
   );
+}
+
+function ResourceManager({
+  hero,
+  updateHero,
+}: {
+  hero: Hero;
+  updateHero: (patch: Partial<Hero>) => void;
+}) {
+  const [name, setName] = useState("");
+  const [max, setMax] = useState(1);
+  const [resetsOn, setResetsOn] = useState<"short" | "long">("long");
+  function add() {
+    if (!name.trim()) return;
+    updateHero({
+      resources: [
+        ...(hero.resources ?? []),
+        { id: Date.now(), name: name.trim(), current: max, max, resetsOn },
+      ],
+    });
+    setName("");
+    setMax(1);
+  }
+  return (
+    <section className="resource-manager">
+      <div>
+        <p>CLASS & HOMEBREW RESOURCES</p>
+        <h3>Resource Counters</h3>
+        <span>Track Rage, Focus Points, Sorcery Points, Channel Divinity, or any custom power.</span>
+      </div>
+      <input value={name} placeholder="Resource name" onChange={(event) => setName(event.target.value)} />
+      <input type="number" min={1} max={99} value={max} onChange={(event) => setMax(Math.max(1, Number(event.target.value)))} />
+      <select value={resetsOn} onChange={(event) => setResetsOn(event.target.value as "short" | "long")}>
+        <option value="short">Short rest</option>
+        <option value="long">Long rest</option>
+      </select>
+      <button className="primary" onClick={add}>Add Counter</button>
+      {!!hero.resources?.length && (
+        <div className="resource-list">
+          {hero.resources.map((resource) => (
+            <button key={resource.id} onClick={() => updateHero({ resources: hero.resources?.filter((item) => item.id !== resource.id) })}>
+              {resource.name} · {resource.max} uses · {resource.resetsOn} rest <b>×</b>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AccountSettings({ accessibility, setAccessibility, toast }: {
+  accessibility: { reducedMotion: boolean; highContrast: boolean; largeText: boolean };
+  setAccessibility: (value: { reducedMotion: boolean; highContrast: boolean; largeText: boolean }) => void;
+  toast: (message: string) => void;
+}) {
+  const [sessions, setSessions] = useState<{ id: string; expiresAt: number; current: boolean }[]>([]);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  useEffect(() => { fetch("/api/account/sessions").then((r) => r.json()).then((data) => setSessions(data.sessions ?? [])); }, []);
+  return <section className="tool-page settings-page">
+    <div className="tool-title"><div><p>YOUR EXPERIENCE</p><h1>Settings & Accessibility</h1><span>Personal preferences are stored with your account.</span></div></div>
+    <div className="settings-grid">
+      <section><h2>Accessibility</h2>{([
+        ["reducedMotion", "Reduced motion", "Disable decorative movement and dice-stage transitions."],
+        ["highContrast", "High contrast", "Increase text and border contrast."],
+        ["largeText", "Larger text", "Increase the interface scale for easier reading."],
+      ] as const).map(([key, label, description]) => <label className="setting-row" key={key}><span><b>{label}</b><small>{description}</small></span><input type="checkbox" checked={accessibility[key]} onChange={(event) => setAccessibility({ ...accessibility, [key]: event.target.checked })} /></label>)}</section>
+      <section><h2>Security</h2><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input type="password" minLength={10} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><button className="primary" onClick={async () => { const response = await fetch("/api/account/password", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) }); const data = await response.json(); toast(response.ok ? "Password updated" : data.error); if (response.ok) { setCurrentPassword(""); setNewPassword(""); } }}>Change Password</button><button onClick={async () => { await fetch("/api/account/sessions", { method: "DELETE" }); toast("Other sessions signed out"); }}>Sign Out Other Devices</button></section>
+    </div>
+    <section className="session-panel"><h2>Account sessions</h2>{sessions.map((session) => <article key={session.id}><b>{session.current ? "Current session" : "Signed-in session"}</b><span>Expires {new Date(session.expiresAt).toLocaleString()}</span><code>{session.id}</code></article>)}</section>
+  </section>;
 }
 
 function AuthGate({
@@ -1103,6 +1427,94 @@ function AuthGate({
         </button>
       </section>
     </main>
+  );
+}
+
+function ConditionTracker({
+  hero,
+  updateHero,
+}: {
+  hero: Hero;
+  updateHero: (patch: Partial<Hero>) => void;
+}) {
+  const [condition, setCondition] = useState("");
+  const common = [
+    "Blinded",
+    "Charmed",
+    "Deafened",
+    "Frightened",
+    "Grappled",
+    "Incapacitated",
+    "Invisible",
+    "Paralyzed",
+    "Poisoned",
+    "Prone",
+    "Restrained",
+    "Stunned",
+    "Unconscious",
+  ];
+  function add(value: string) {
+    if (value && !hero.conditions?.includes(value))
+      updateHero({ conditions: [...(hero.conditions ?? []), value] });
+    setCondition("");
+  }
+  return (
+    <div className="condition-tracker">
+      <div>
+        <span>ACTIVE EFFECTS</span>
+        {(hero.conditions ?? []).map((value) => (
+          <button
+            key={value}
+            onClick={() =>
+              updateHero({
+                conditions: hero.conditions?.filter((item) => item !== value),
+              })
+            }
+          >
+            {value} ×
+          </button>
+        ))}
+        {!(hero.conditions ?? []).length && <small>No conditions</small>}
+      </div>
+      <label>
+        <select
+          value={condition}
+          onChange={(e) => {
+            setCondition(e.target.value);
+            add(e.target.value);
+          }}
+        >
+          <option value="">Add condition…</option>
+          {common.map((value) => (
+            <option key={value}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <button
+        className={hero.concentration ? "active" : ""}
+        onClick={() => updateHero({ concentration: !hero.concentration })}
+      >
+        ◉ Concentration
+      </button>
+      <label className="exhaustion-control">
+        Exhaustion{" "}
+        <button
+          onClick={() =>
+            updateHero({ exhaustion: Math.max(0, (hero.exhaustion ?? 0) - 1) })
+          }
+        >
+          −
+        </button>
+        <b>{hero.exhaustion ?? 0}</b>
+        <button
+          onClick={() =>
+            updateHero({ exhaustion: Math.min(6, (hero.exhaustion ?? 0) + 1) })
+          }
+        >
+          ＋
+        </button>
+      </label>
+    </div>
   );
 }
 
@@ -2010,6 +2422,26 @@ function DicePanel({
   sound: boolean;
   setSound: (value: boolean) => void;
 }) {
+  const [dicePool, setDicePool] = useState<Record<number, number>>({});
+  function updatePool(sides: number, amount: number) {
+    setDicePool((current) => {
+      const next = {
+        ...current,
+        [sides]: Math.max(0, Math.min(50, (current[sides] ?? 0) + amount)),
+      };
+      if (!next[sides]) delete next[sides];
+      const expression = Object.entries(next)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([die, count]) => `${count}d${die}`)
+        .join("+");
+      setFormula(expression || "1d20");
+      return next;
+    });
+  }
+  function clearPool() {
+    setDicePool({});
+    setFormula("1d20");
+  }
   return (
     <aside className="dice-panel">
       <div className="dice-heading">
@@ -2045,16 +2477,29 @@ function DicePanel({
       </label>
       <div className="quick-dice">
         {[4, 6, 8, 10, 12, 20, 100].map((die) => (
-          <button
+          <div
+            className={`dice-pick ${dicePool[die] ? "selected" : ""}`}
             key={die}
-            onClick={() => {
-              setFormula(`1d${die}`);
-              onRoll(`1d${die}`, `d${die}`);
-            }}
           >
-            d{die}
-          </button>
+            <button onClick={() => updatePool(die, 1)}>
+              <span>d{die}</span>
+              {dicePool[die] ? <b>{dicePool[die]}</b> : null}
+            </button>
+            {dicePool[die] ? (
+              <button
+                className="dice-minus"
+                aria-label={`Remove one d${die}`}
+                onClick={() => updatePool(die, -1)}
+              >
+                −
+              </button>
+            ) : null}
+          </div>
         ))}
+      </div>
+      <div className="pool-summary">
+        <span>Click a die repeatedly to add it to the pool.</span>
+        <button onClick={clearPool}>Clear pool</button>
       </div>
       <div className="roll-mode">
         {(["disadvantage", "normal", "advantage"] as RollMode[]).map(

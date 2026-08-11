@@ -73,6 +73,13 @@ export default function GuidedEditor({
       sum + (POINT_BUY_COST[draft.abilities[ability.key]] ?? 99),
     0,
   );
+  const warnings = [
+    !draft.name.trim() && "Character name is required.",
+    !draft.className && "Choose a class.",
+    draft.level >= 3 && !draft.subclass && "Choose a subclass for this level.",
+    scoreMethod === "point" && pointSpent > 27 && `Point buy is ${pointSpent - 27} points over budget.`,
+    draft.skillProficiency.length < 2 && "Choose at least two skill proficiencies.",
+  ].filter(Boolean) as string[];
   function set<K extends keyof Hero>(key: K, value: Hero[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -177,6 +184,12 @@ export default function GuidedEditor({
                 <span>{draft.name.slice(0, 2).toUpperCase()}</span>
               )}
               <input type="file" accept="image/*" onChange={uploadPortrait} />
+            </label>
+            <label>
+              <span>Ruleset</span>
+              <select value={draft.ruleset ?? "2024 SRD"} onChange={(event) => set("ruleset", event.target.value as Hero["ruleset"])}>
+                <option>2024 SRD</option><option>SRD 5.1</option><option>Wall Gloria</option><option>Homebrew</option>
+              </select>
             </label>
             <label>
               <span>Character name</span>
@@ -599,6 +612,7 @@ export default function GuidedEditor({
             </>
           )}
         </main>
+        {!!warnings.length && <aside className="builder-validation"><b>Character check</b>{warnings.map((warning) => <span key={warning}>⚠ {warning}</span>)}</aside>}
         <footer>
           <button
             className="secondary"
@@ -617,7 +631,7 @@ export default function GuidedEditor({
           ) : (
             <button
               className="primary"
-              disabled={scoreMethod === "point" && pointSpent > 27}
+              disabled={warnings.length > 0}
               onClick={save}
             >
               Finish Character
