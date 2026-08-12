@@ -1052,11 +1052,8 @@
     opacity: 0;
   }
   8%,
-  88% {
-    opacity: 1;
-  }
   100% {
-    opacity: 0;
+    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -41,6 +41,16 @@ function faceNumber(value: number, sides: number, gold: boolean) {
   canvas.width = 128;
   canvas.height = 128;
   const context = canvas.getContext("2d")!;
+  if (gold) {
+    const glow = context.createRadialGradient(64, 64, 8, 64, 64, 58);
+    glow.addColorStop(0, "rgba(255, 225, 123, 0.42)");
+    glow.addColorStop(0.55, "rgba(184, 113, 255, 0.2)");
+    glow.addColorStop(1, "rgba(184, 113, 255, 0)");
+    context.fillStyle = glow;
+    context.fillRect(0, 0, 128, 128);
+    context.shadowColor = "#ffd75f";
+    context.shadowBlur = 18;
+  }
   context.fillStyle = gold ? "#ffe17b" : "#fffaf0";
   context.strokeStyle = "#160d20";
   context.lineWidth = 10;
@@ -54,9 +64,11 @@ function faceNumber(value: number, sides: number, gold: boolean) {
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
+    alphaTest: 0.08,
     depthWrite: false,
     polygonOffset: true,
-    polygonOffsetFactor: -4,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
   return { texture, material };
 }
@@ -86,20 +98,23 @@ function addFaceNumbers(group: THREE.Group, geometry: THREE.BufferGeometry, side
     });
   }
   faces.forEach(({ normal, vertices }, index) => {
+    const isResultFace = index === 0;
     const value = index === 0 ? result : ((index - 1) % sides) + 1;
-    const label = faceNumber(value, sides, value === result);
+    const label = faceNumber(value, sides, isResultFace);
     materials.push(label.material); textures.push(label.texture);
-    const scale = sides >= 20 ? 0.36 : sides >= 12 ? 0.42 : sides >= 8 ? 0.48 : 0.58;
+    const baseScale = sides >= 20 ? 0.36 : sides >= 12 ? 0.42 : sides >= 8 ? 0.48 : 0.58;
+    const scale = baseScale * (isResultFace ? 1.18 : 1);
     const planeGeometry = new THREE.PlaneGeometry(scale, scale);
     geometries.push(planeGeometry);
     const plane = new THREE.Mesh(planeGeometry, label.material);
     const faceCenter = vertices.reduce((sum, vertex) => sum.add(vertex), new THREE.Vector3()).multiplyScalar(1 / vertices.length);
-    plane.position.copy(faceCenter).addScaledVector(normal, 0.008);
+    plane.position.copy(faceCenter).addScaledVector(normal, isResultFace ? 0.014 : 0.009);
     plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
     plane.renderOrder = 4;
     group.add(plane);
   });
   if (flat !== geometry) flat.dispose();
+  return faces[0]?.normal.clone() ?? new THREE.Vector3(0, 0, 1);
 }
 
 export default function ThreeDice({
@@ -186,7 +201,7 @@ export default function ThreeDice({
         edges.scale.setScalar(1.0015);
         edges.renderOrder = 3;
         group.add(edges);
-        addFaceNumbers(group, geometry, dieResult.sides, dieResult.value, geometries, materials, textures);
+        const resultFaceNormal = addFaceNumbers(group, geometry, dieResult.sides, dieResult.value, geometries, materials, textures);
         const column = index % columns;
         const row = Math.floor(index / columns);
         group.position.set(
@@ -197,6 +212,10 @@ export default function ThreeDice({
         group.userData.startX = group.position.x;
         group.userData.startY = group.position.y;
         group.userData.seed = dieResult.value + index * 7;
+        group.userData.resultRotation = new THREE.Quaternion().setFromUnitVectors(
+          resultFaceNormal,
+          new THREE.Vector3(0, 0, 1),
+        );
         scene.add(group);
         return group;
       });
@@ -206,10 +225,16 @@ export default function ThreeDice({
         const settle = 1 - Math.pow(1 - elapsed, 3);
         groups.forEach((group, index) => {
           const seed = group.userData.seed as number;
-          const spin = (1 - settle) * (15 + (seed % 5));
-          group.rotation.x = spin * 0.73 + (seed % 7) * 0.22 * settle;
-          group.rotation.y = spin + (seed % 11) * 0.19 * settle;
-          group.rotation.z = spin * 0.31 + (seed % 3) * 0.2 * settle;
+          const resultRotation = group.userData.resultRotation as THREE.Quaternion;
+          const spinRotation = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(
+              elapsed * Math.PI * (8.5 + (seed % 3) * 0.35),
+              elapsed * Math.PI * (11 + (seed % 5) * 0.3),
+              elapsed * Math.PI * (4.2 + (seed % 2) * 0.25),
+            ),
+          );
+          const lockProgress = THREE.MathUtils.smoothstep(elapsed, 0.58, 1);
+          group.quaternion.copy(spinRotation).slerp(resultRotation, lockProgress);
           group.position.x =
             group.userData.startX +
             Math.sin(elapsed * Math.PI * 2 + index) * (1 - settle) * 0.65;
