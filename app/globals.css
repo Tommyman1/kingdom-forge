@@ -100,6 +100,7 @@
 .table-mode { min-height: 100vh; background: radial-gradient(circle at 50% 0,#251430,#08060b 68%); }
 .table-mode .sidebar,
 .table-mode .topbar,
+.table-mode .character-organizer,
 .table-mode .character-strip { display: none; }
 .table-mode .workspace { margin-left: 0; padding: 72px 18px 24px; }
 .table-mode .content-grid { grid-template-columns: minmax(620px, 1fr) minmax(390px, 470px); max-width: 1600px; margin: 0 auto; gap: 22px; }
@@ -1003,7 +1004,7 @@
   place-items: center;
   pointer-events: none;
   background: radial-gradient(circle at center, #28143d99, transparent 45%);
-  animation: threeDiceFade 4.35s both;
+  animation: threeDiceFade 5.35s both;
 }
 .three-dice-canvas {
   width: 260px;
@@ -1987,7 +1988,7 @@ nav {
   overflow: auto;
   padding-bottom: 3px;
 }
-.character-organizer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin: 18px 0 -14px; color: var(--muted); font-size: 10px; }
+.character-organizer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; margin: 18px 0 -14px; color: var(--muted); font-size: 10px; }
 .character-organizer span { margin-right: auto; }
 .character-organizer b { color: var(--gold); }
 .character-organizer button { min-height: 34px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: #17111f; color: #d8cce0; }
@@ -3815,7 +3816,8 @@ input, select, textarea, button { min-width: 0; }
   .condition-tracker { padding-inline: 10px; }
   .character-organizer { display: grid; grid-template-columns: 1fr auto auto; margin-top: 12px; }
   .character-organizer span { grid-column: 1/-1; }
-  .character-organizer button:last-child { grid-column: 1; grid-row: 2; }
+  .character-organizer button:nth-of-type(3) { grid-column: 1; grid-row: 2; }
+  .character-organizer button:nth-of-type(4) { grid-column: 1/-1; }
   .mobile-table-toggle { display: block; position: fixed; z-index: 68; right: max(12px,env(safe-area-inset-right)); bottom: max(14px,env(safe-area-inset-bottom)); min-height: 46px; padding: 0 16px; border: 1px solid var(--gold); border-radius: 999px; background: #291934f2; color: var(--gold); box-shadow: 0 10px 32px #000b; font-weight: 800; }
   .spell-summary { grid-template-columns: repeat(2,minmax(0,1fr)); margin: 12px 10px; border: 1px solid #392b43; }
   .spell-summary article { min-height: 94px; display: grid; place-content: center; }

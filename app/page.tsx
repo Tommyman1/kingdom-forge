@@ -554,6 +554,19 @@ export default function Home() {
     const value = window.prompt("Group name (for example: Wall Gloria or One-shots). Leave blank for no group.", hero.group ?? "");
     if (value !== null) updateHero({ group: value.trim() || undefined });
   }
+  function sortHeroesByGroup() {
+    setHeroes((items) =>
+      [...items].sort((left, right) => {
+        const leftGroup = left.group?.trim();
+        const rightGroup = right.group?.trim();
+        if (leftGroup && !rightGroup) return -1;
+        if (!leftGroup && rightGroup) return 1;
+        const groupOrder = (leftGroup ?? "").localeCompare(rightGroup ?? "", undefined, { sensitivity: "base" });
+        return groupOrder || left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+      }),
+    );
+    setToast("Characters sorted by group");
+  }
   function createHero() {
     const next = makeHero();
     setHeroes((items) => [...items, next]);
@@ -736,7 +749,7 @@ export default function Home() {
     if (diceSound) playDiceSound();
     if (diceAnimation) {
       setAnimatedRoll({ total, dice: animatedDice.slice(0, 24) });
-      window.setTimeout(() => setAnimatedRoll(null), 4400);
+      window.setTimeout(() => setAnimatedRoll(null), 5400);
     }
   }
 
@@ -970,6 +983,7 @@ export default function Home() {
               <button onClick={() => moveHero(hero.id, -1)} aria-label="Move selected character left">←</button>
               <button onClick={() => moveHero(hero.id, 1)} aria-label="Move selected character right">→</button>
               <button onClick={chooseHeroGroup}>Group character</button>
+              <button onClick={sortHeroesByGroup}>Sort by group</button>
             </div>
             <div className="character-strip" aria-label="Character list">
               {heroes.map((item) => (
