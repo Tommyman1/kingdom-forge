@@ -18,6 +18,8 @@ import {
 } from "../lib/rules2024";
 import GuidedEditor from "./GuidedEditor";
 import LevelUpWizard from "./LevelUpWizard";
+import { featureDescription, preparedSpellLimit, spellInfo } from "../lib/rulesContent";
+import { BACKGROUNDS, SPECIES } from "../lib/builder2024";
 import {
   AdminHub,
   CampaignHub,
@@ -57,6 +59,7 @@ export type Item = {
   armorType?: "light" | "medium" | "heavy" | "shield";
   dexCap?: number;
   acBonus?: number;
+  rarity?: "Common" | "Uncommon" | "Rare" | "Very Rare" | "Legendary" | "Artifact";
 };
 type Account = {
   id: number;
@@ -130,6 +133,7 @@ export type Hero = {
   resistances?: string[];
   immunities?: string[];
   vulnerabilities?: string[];
+  shortRestsSinceLong?: number;
 };
 
 type HeroSnapshot = { id: number; heroId: number; savedAt: string; hero: Hero };
@@ -211,6 +215,7 @@ function makeHero(id = Date.now()): Hero {
     resistances: [],
     immunities: [],
     vulnerabilities: [],
+    shortRestsSinceLong: 0,
     spellSlots: {
       1: { used: 0, max: 0 },
       2: { used: 0, max: 0 },
@@ -401,6 +406,7 @@ export default function Home() {
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
+  const [xpAward, setXpAward] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
   const hero = useMemo(
     () => heroes.find((item) => item.id === selectedId) ?? heroes[0],
@@ -558,6 +564,7 @@ export default function Home() {
           ? { ...resource, current: resource.max }
           : resource,
       ),
+      shortRestsSinceLong: (hero.shortRestsSinceLong ?? 0) + 1,
     });
     setToast("Short rest complete");
   }
@@ -581,6 +588,7 @@ export default function Home() {
         ...resource,
         current: resource.max,
       })),
+      shortRestsSinceLong: 0,
     });
     setToast("Long rest complete");
   }
@@ -678,7 +686,7 @@ export default function Home() {
     if (diceSound) playDiceSound();
     if (diceAnimation) {
       setAnimatedRoll({ total, dice: animatedDice.slice(0, 24) });
-      window.setTimeout(() => setAnimatedRoll(null), 1850);
+      window.setTimeout(() => setAnimatedRoll(null), 2450);
     }
   }
 
@@ -803,6 +811,7 @@ export default function Home() {
           <ThreeDice total={animatedRoll.total} dice={animatedRoll.dice} />
         </Suspense>
       )}
+      {tableMode && <button className="exit-table-mode" onClick={() => setTableMode(false)}>× Exit Table Mode</button>}
       {commandOpen && <div className="command-backdrop" onClick={() => setCommandOpen(false)}><section className="command-palette" onClick={(event) => event.stopPropagation()}><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Search characters and tools…" />{[
         ...(["characters", "campaigns", "compendium", "homebrew", "settings"] as AppView[]).map((target) => ({ label: `Open ${target}`, run: () => setView(target) })),
         ...heroes.map((item) => ({ label: `Character · ${item.name}`, run: () => { setView("characters"); setSelectedId(item.id); } })),
@@ -979,7 +988,7 @@ export default function Home() {
                     >
                       Edit Sheet
                     </button>
-                    <button className="ghost table-toggle" onClick={() => setTableMode(!tableMode)}>
+                    <button className="ghost table-toggle" onClick={() => { const next = !tableMode; setTableMode(next); if (next) setActiveTab("actions"); }}>
                       {tableMode ? "Full Sheet" : "Table Mode"}
                     </button>
                     <div className="more-wrap">
@@ -1015,6 +1024,7 @@ export default function Home() {
                     />
                   </i>
                   <span>LEVEL {hero.level + 1}</span>
+                  <label className="xp-award"><input type="number" min="0" value={xpAward} onChange={(event) => setXpAward(Math.max(0, Number(event.target.value)))} placeholder="XP earned" /><button onClick={() => { updateHero({ xp: hero.xp + xpAward }); setXpAward(0); setToast(`Added ${xpAward.toLocaleString()} XP`); }}>Add XP</button></label>
                 </div>
                 <div className="combat-row">
                   <div>
@@ -1090,6 +1100,7 @@ export default function Home() {
                     <strong>☾</strong>
                     <small>Long Rest</small>
                   </button>
+                  <div className="rest-count"><span>SHORT RESTS</span><strong>{hero.shortRestsSinceLong ?? 0}</strong><small>since last long rest</small></div>
                   <div className="death-saves">
                     <span>DEATH SAVES</span>
                     <label>
@@ -1161,12 +1172,7 @@ export default function Home() {
                     />
                   )}
                   {activeTab === "actions" && (
-                    <ActionsTab
-                      hero={hero}
-                      proficiencyBonus={proficiencyBonus}
-                      updateHero={updateHero}
-                      onRoll={parseAndRoll}
-                    />
+                    <><ActionsTab hero={hero} proficiencyBonus={proficiencyBonus} updateHero={updateHero} onRoll={parseAndRoll} /><ResourceManager hero={hero} updateHero={updateHero} /></>
                   )}
                   {activeTab === "spells" && (
                     <SpellsTab
@@ -1202,7 +1208,6 @@ export default function Home() {
               />
             </div>
             <ConditionTracker hero={hero} updateHero={updateHero} />
-            <ResourceManager hero={hero} updateHero={updateHero} />
           </>
         ) : view === "campaigns" ? (
           <CampaignHub hero={hero} toast={setToast} />
@@ -1273,7 +1278,7 @@ function ResourceManager({
       <div>
         <p>CLASS & HOMEBREW RESOURCES</p>
         <h3>Resource Counters</h3>
-        <span>Track Rage, Focus Points, Sorcery Points, Channel Divinity, or any custom power.</span>
+        <span>These counters appear directly above in the combat resource row. Press − when you spend a use and + to restore one. A Short or Long Rest automatically refills counters matching that reset type. Class features acquired during level-up create counters here when they have limited uses.</span>
       </div>
       <input value={name} placeholder="Resource name" onChange={(event) => setName(event.target.value)} />
       <input type="number" min={1} max={99} value={max} onChange={(event) => setMax(Math.max(1, Number(event.target.value)))} />
@@ -1281,7 +1286,7 @@ function ResourceManager({
         <option value="short">Short rest</option>
         <option value="long">Long rest</option>
       </select>
-      <button className="primary" onClick={add}>Add Counter</button>
+      <button className="primary" onClick={add}>Create Counter</button>
       {!!hero.resources?.length && (
         <div className="resource-list">
           {hero.resources.map((resource) => (
@@ -1777,6 +1782,7 @@ function ActionsTab({
               <span>
                 <small>LEVEL {feature.level}</small>
                 <b>{feature.name}</b>
+                <p>{featureDescription(feature.name, Boolean(feature.track))}</p>
               </span>
               {feature.track ? (
                 <label>
@@ -1808,8 +1814,11 @@ function SpellsTab({
   updateHero: (patch: Partial<Hero>) => void;
   onRoll: (formula: string, label?: string) => void;
 }) {
-  const casting = mod(hero.abilities.cha);
+  const castingKey = castingAbility(hero);
+  const casting = mod(hero.abilities[castingKey]);
   const prof = Math.ceil(hero.level / 4) + 1;
+  const preparationLimit = preparedSpellLimit(hero.className, hero.level, casting);
+  const preparedLeveled = hero.spells.filter((spell) => spell.prepared && spell.level > 0).length;
   function useSlot(level: number) {
     const slot = hero.spellSlots[level];
     if (!slot?.max) return;
@@ -1825,7 +1834,7 @@ function SpellsTab({
       <div className="spell-summary">
         <article>
           <span>SPELLCASTING</span>
-          <strong>CHA</strong>
+          <strong>{castingKey.toUpperCase()}</strong>
         </article>
         <article>
           <span>SAVE DC</span>
@@ -1844,7 +1853,7 @@ function SpellsTab({
         <article>
           <span>PREPARED</span>
           <strong>
-            {hero.spells.filter((spell) => spell.prepared).length}
+            {preparedLeveled} / {preparationLimit}
           </strong>
         </article>
       </div>
@@ -1875,15 +1884,16 @@ function SpellsTab({
             <article key={spell.id}>
               <button
                 className={`prepare ${spell.prepared ? "active" : ""}`}
-                onClick={() =>
+                onClick={() => {
+                  if (!spell.prepared && spell.level > 0 && preparedLeveled >= preparationLimit) return window.alert(`You can prepare ${preparationLimit} leveled spells. Unprepare one first.`);
                   updateHero({
                     spells: hero.spells.map((item) =>
                       item.id === spell.id
                         ? { ...item, prepared: !item.prepared }
                         : item,
                     ),
-                  })
-                }
+                  });
+                }}
               >
                 ✦
               </button>
@@ -1892,6 +1902,7 @@ function SpellsTab({
                 <small>
                   Level {spell.level} · {spell.school}
                 </small>
+                <small>{spellInfo(spell.name).castingTime} · {spellInfo(spell.name).range} · {spellInfo(spell.name).duration}{spellInfo(spell.name).concentration ? " · Concentration" : ""}</small>
                 <p>{spell.description}</p>
               </span>
               <button
@@ -1934,6 +1945,7 @@ function InventoryTab({
     armorType: "light",
     dexCap: 99,
     acBonus: 0,
+    rarity: "Common",
   };
   const [custom, setCustom] = useState(blank);
   const [catalogName, setCatalogName] = useState(ITEM_CATALOG[0].name);
@@ -1951,6 +1963,7 @@ function InventoryTab({
           id: Date.now(),
           name: custom.name.trim(),
           equipped: false,
+          rarity: "Common",
         },
       ],
     });
@@ -2106,6 +2119,7 @@ function InventoryTab({
               }
             />
           </label>
+          <label><span>Rarity</span><select value={custom.rarity} onChange={(event) => setCustom({ ...custom, rarity: event.target.value as Item["rarity"] })}>{["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"].map((rarity) => <option key={rarity}>{rarity}</option>)}</select></label>
           {custom.category === "weapon" && (
             <>
               <label>
@@ -2256,6 +2270,7 @@ function InventoryTab({
               <b>{item.name}</b>
               <small>
                 {item.equipped ? "Equipped" : "Stowed"}
+                {` · ${item.rarity ?? "Common"}`}
                 {item.cost ? ` · ${item.cost}` : ""}
                 {item.category === "weapon" && item.damage
                   ? ` · ${item.damage} ${item.damageType ?? ""}${item.elementDamage ? ` + ${item.elementDamage} ${item.elementType ?? ""}` : ""}`
@@ -2319,6 +2334,9 @@ function FeaturesTab({
   hero: Hero;
   updateHero: (patch: Partial<Hero>) => void;
 }) {
+  const classFeatures = (CLASS_RULES[hero.className]?.features ?? []).filter((feature) => feature.level <= hero.level).sort((a, b) => a.level - b.level);
+  const species = SPECIES[hero.ancestry as keyof typeof SPECIES];
+  const background = BACKGROUNDS[hero.background as keyof typeof BACKGROUNDS];
   return (
     <div className="feature-layout">
       <section>
@@ -2344,27 +2362,12 @@ function FeaturesTab({
       </section>
       <section>
         <div className="section-title">
-          <h3>Class Features</h3>
+          <h3>Class, Species & Background Features</h3>
         </div>
-        <article className="feature-card">
-          <span>PALADIN · LEVEL 1</span>
-          <h4>Divine Sense</h4>
-          <p>Detect strong celestial, fiendish, or undead presences nearby.</p>
-        </article>
-        <article className="feature-card">
-          <span>PALADIN · LEVEL 2</span>
-          <h4>Divine Smite</h4>
-          <p>
-            Expend a spell slot when you hit to deal additional radiant damage.
-          </p>
-        </article>
-        <article className="feature-card">
-          <span>{hero.ancestry.toUpperCase()}</span>
-          <h4>Healing Hands</h4>
-          <p>
-            Channel divine energy to restore hit points to a creature you touch.
-          </p>
-        </article>
+        {classFeatures.map((feature) => <article className="feature-card" key={`${feature.level}-${feature.name}`}><span>{hero.className.toUpperCase()} · LEVEL {feature.level}{feature.track ? " · LIMITED USE" : " · PASSIVE/AVAILABLE"}</span><h4>{feature.name}</h4><p>{featureDescription(feature.name, Boolean(feature.track))}</p></article>)}
+        {species?.traits.map((trait) => <article className="feature-card species" key={trait.name}><span>{hero.ancestry.toUpperCase()} TRAIT</span><h4>{trait.name}</h4><p>{trait.summary}</p></article>)}
+        {background && <article className="feature-card background"><span>{hero.background.toUpperCase()} BACKGROUND</span><h4>{background.feat}</h4><p>Granted skills: {background.skills}. Each proficient skill adds your proficiency bonus (+{Math.ceil(hero.level / 4) + 1}) to its ability check. Tool: {background.tool}. Eligible abilities: {background.abilities}.</p></article>}
+        {(hero.feats ?? []).map((feat) => <article className="feature-card feat" key={feat.id}><span>FEAT</span><h4>{feat.name}</h4><p>{feat.description}</p></article>)}
       </section>
     </div>
   );
@@ -2481,19 +2484,22 @@ function DicePanel({
             className={`dice-pick ${dicePool[die] ? "selected" : ""}`}
             key={die}
           >
-            <button onClick={() => updatePool(die, 1)}>
-              <span>d{die}</span>
-              {dicePool[die] ? <b>{dicePool[die]}</b> : null}
+            <button className="dice-add-zone" onClick={() => updatePool(die, 1)}>
+              <strong>d{die}</strong>
+              <span>{dicePool[die] ? `${dicePool[die]} selected · tap to add` : "Tap to add"}</span>
             </button>
-            {dicePool[die] ? (
+            <div className="dice-stepper">
               <button
                 className="dice-minus"
                 aria-label={`Remove one d${die}`}
+                disabled={!dicePool[die]}
                 onClick={() => updatePool(die, -1)}
               >
-                −
+                − Remove
               </button>
-            ) : null}
+              <b>{dicePool[die] ?? 0}</b>
+              <button aria-label={`Add one d${die}`} onClick={() => updatePool(die, 1)}>＋ Add</button>
+            </div>
           </div>
         ))}
       </div>

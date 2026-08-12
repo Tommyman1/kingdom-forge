@@ -1,8 +1,8 @@
 # Kingdom Forge
 
-## Version 2.0
+## Version 2.1
 
-Kingdom Forge 2.0 is the cumulative, Portainer-ready campaign platform. It retains every 1.x feature and adds live campaign rolls, DM roll requests, campaign access roles, feat advancement, automatic class resources, map upload/grid/fog/fullscreen controls, rules inspection, print/PDF output, accessibility preferences, session security, rate limiting, audit history, diagnostics, health checks, scheduled backups, schema migrations, character validation, ruleset separation, and persistent save status.
+Kingdom Forge 2.1 is the cumulative, Portainer-ready campaign platform. This polish release adds a roomy dice-pool selector, larger and more consistent Three.js dice, a focused table layout with an always-visible exit, inspectable compendium records, explained class features and spells, prepared-spell limits, item rarities, visible short-rest history, clearer resource tracking, direct XP awards, background/species impact summaries, and individual d20 ability rolling. It retains all 2.0 campaign, account, security, backup, homebrew, and table tools.
 
 Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
 
@@ -41,7 +41,7 @@ Kingdom Forge is a self-hosted fantasy character-sheet dashboard and dice roller
 - Expandable current-level features plus higher-level progression previews
 - Prepared starter-spell selection for spellcasting classes
 - Species trait browser and 16 selectable 2024 backgrounds
-- Standard array, 4d6-drop-lowest, and validated 27-point-buy score methods
+- Standard array, 4d6-drop-lowest, individual d20 rolls, and validated 27-point-buy score methods
 - All 12 core classes with level-aware subclass choices and 2024 rules progression
 - 4d6-drop-lowest ability rolls plus the standard array during character creation
 - HP controls, temporary HP, short/long rests, hit dice, and death saves

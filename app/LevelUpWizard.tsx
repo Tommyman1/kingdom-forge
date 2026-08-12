@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CLASS_RULES } from "../lib/rules2024";
+import { featureDescription } from "../lib/rulesContent";
 import type { AbilityKey, Hero } from "./page";
 
 const abilities: { key: AbilityKey; label: string }[] = [
@@ -180,9 +181,7 @@ export default function LevelUpWizard({
               <article className="level-feature" key={feature.name}>
                 <b>{feature.name}</b>
                 <span>
-                  {feature.track
-                    ? "Limited-use feature; added to Actions tracking."
-                    : "Automatically added to the character."}
+                  {featureDescription(feature.name, feature.track)}
                 </span>
               </article>
             ))
@@ -291,6 +290,7 @@ export default function LevelUpWizard({
             </div>}
           </section>
         )}
+        {!hasAsi && <p className="asi-notice">This class level does not grant an Ability Score Improvement. When one is unlocked, this screen shows the +2, +1/+1, and feat controls before you confirm.</p>}
         <footer>
           <button className="secondary" onClick={onClose}>
             Cancel

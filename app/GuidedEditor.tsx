@@ -14,6 +14,7 @@ import {
   STANDARD_ARRAY,
 } from "../lib/rules2024";
 import type { AbilityKey, Hero, Item, Spell } from "./page";
+import { featureDescription, preparedSpellLimit, spellInfo } from "../lib/rulesContent";
 
 type Step = "class" | "background" | "species" | "abilities" | "equipment";
 const STEPS: { key: Step; label: string }[] = [
@@ -44,9 +45,10 @@ export default function GuidedEditor({
   const [draft, setDraft] = useState(hero);
   const [step, setStep] = useState<Step>("class");
   const [open, setOpen] = useState("");
-  const [scoreMethod, setScoreMethod] = useState<"standard" | "roll" | "point">(
+  const [scoreMethod, setScoreMethod] = useState<"standard" | "roll" | "d20" | "point">(
     "standard",
   );
+  const [speciesSkill, setSpeciesSkill] = useState("Perception");
   const [selectedGear, setSelectedGear] = useState(
     () => new Set(hero.inventory.map((item) => item.name)),
   );
@@ -73,6 +75,9 @@ export default function GuidedEditor({
       sum + (POINT_BUY_COST[draft.abilities[ability.key]] ?? 99),
     0,
   );
+  const castingKey: AbilityKey = rule.primary.includes("Intelligence") ? "int" : rule.primary.includes("Wisdom") ? "wis" : "cha";
+  const preparedLimit = preparedSpellLimit(draft.className, draft.level, Math.floor((draft.abilities[castingKey] - 10) / 2));
+  const preparedCount = draft.spells.filter((spell) => spell.prepared && spell.level > 0).length;
   const warnings = [
     !draft.name.trim() && "Character name is required.",
     !draft.className && "Choose a class.",
@@ -101,6 +106,16 @@ export default function GuidedEditor({
     }));
     setOpen("");
   }
+  function chooseBackground(background: string) {
+    const everyBackgroundSkill = new Set(Object.values(BACKGROUNDS).flatMap((item) => item.skills.split(", ")));
+    const granted = BACKGROUNDS[background as keyof typeof BACKGROUNDS].skills.split(", ");
+    setDraft((current) => ({ ...current, background, skillProficiency: [...new Set([...current.skillProficiency.filter((skill) => !everyBackgroundSkill.has(skill)), ...granted])] }));
+  }
+  function chooseSpecies(ancestry: string) {
+    const species = SPECIES[ancestry as keyof typeof SPECIES];
+    const speedTrait = species.traits.find((trait) => trait.name === "Speed")?.summary.match(/\d+/)?.[0];
+    setDraft((current) => ({ ...current, ancestry, speed: speedTrait ? Number(speedTrait) : current.speed }));
+  }
   function assign(values: number[]) {
     setDraft((current) => ({
       ...current,
@@ -111,6 +126,8 @@ export default function GuidedEditor({
   }
   function toggleSpell(name: string) {
     const found = draft.spells.find((spell) => spell.name === name);
+    const info = spellInfo(name);
+    if (!found && info.level > 0 && preparedCount >= preparedLimit) return window.alert(`Preparation limit reached (${preparedLimit}). Unprepare another leveled spell first.`);
     const spells = found
       ? draft.spells.filter((spell) => spell.name !== name)
       : [
@@ -118,28 +135,10 @@ export default function GuidedEditor({
           {
             id: Date.now() + draft.spells.length,
             name,
-            level: [
-              "Light",
-              "Mage Hand",
-              "Ray of Frost",
-              "Shocking Grasp",
-              "Fire Bolt",
-              "Guidance",
-              "Sacred Flame",
-              "Thaumaturgy",
-              "Druidcraft",
-              "Produce Flame",
-              "Shillelagh",
-              "Vicious Mockery",
-              "Dancing Lights",
-              "Eldritch Blast",
-              "Chill Touch",
-            ].includes(name)
-              ? 0
-              : 1,
-            school: "Class spell",
+            level: info.level,
+            school: info.school,
             prepared: true,
-            description: "Prepared during character creation.",
+            description: info.summary,
           },
         ];
     set("spells", spells);
@@ -168,7 +167,8 @@ export default function GuidedEditor({
       equipped: false,
       category: "gear",
     }));
-    onSave({ ...draft, inventory: [...existingCustom, ...known] });
+    const speciesGrantsSkill = draft.ancestry === "Human" || draft.ancestry === "Elf";
+    onSave({ ...draft, skillProficiency: speciesGrantsSkill ? [...new Set([...draft.skillProficiency, speciesSkill])] : draft.skillProficiency, inventory: [...existingCustom, ...known] });
   }
   return (
     <div className="builder-backdrop">
@@ -299,7 +299,7 @@ export default function GuidedEditor({
                         meta={`${feature.level}${ordinal(feature.level)} level${feature.track ? " · Trackable use" : ""}`}
                         open={open === feature.name}
                         onClick={() => toggleOpen(feature.name)}
-                        summary={featureSummary(feature.name)}
+                        summary={featureDescription(feature.name, Boolean(feature.track))}
                       />
                     ))}
                   </div>
@@ -326,13 +326,7 @@ export default function GuidedEditor({
                     <>
                       <div className="prepared-heading">
                         <strong>
-                          Prepared Spells (
-                          {
-                            draft.spells.filter((spell) =>
-                              spellNames.includes(spell.name as never),
-                            ).length
-                          }
-                          )
+                          Prepared leveled spells {preparedCount} / {preparedLimit}
                         </strong>
                         <span>
                           Choose the spells this character knows or prepares.
@@ -353,26 +347,10 @@ export default function GuidedEditor({
                               <span>
                                 <b>{name}</b>
                                 <small>
-                                  {[
-                                    "Light",
-                                    "Mage Hand",
-                                    "Ray of Frost",
-                                    "Shocking Grasp",
-                                    "Fire Bolt",
-                                    "Guidance",
-                                    "Sacred Flame",
-                                    "Thaumaturgy",
-                                    "Druidcraft",
-                                    "Produce Flame",
-                                    "Shillelagh",
-                                    "Vicious Mockery",
-                                    "Dancing Lights",
-                                    "Eldritch Blast",
-                                    "Chill Touch",
-                                  ].includes(name)
-                                    ? "Cantrip"
-                                    : "1st Level"}
+                                  {spellInfo(name).level === 0 ? "Cantrip" : `${spellInfo(name).level}${ordinal(spellInfo(name).level)} Level`} · {spellInfo(name).school}
                                 </small>
+                                <small>{spellInfo(name).castingTime} · {spellInfo(name).range} · {spellInfo(name).duration}{spellInfo(name).concentration ? " · Concentration" : ""}</small>
+                                <p>{spellInfo(name).summary}</p>
                               </span>
                             </button>
                           );
@@ -405,7 +383,7 @@ export default function GuidedEditor({
                   <button
                     key={name}
                     className={draft.background === name ? "selected" : ""}
-                    onClick={() => set("background", name)}
+                    onClick={() => chooseBackground(name)}
                   >
                     <strong>{name}</strong>
                     <span>{data.feat}</span>
@@ -449,7 +427,7 @@ export default function GuidedEditor({
                   <button
                     key={name}
                     className={draft.ancestry === name ? "selected" : ""}
-                    onClick={() => set("ancestry", name)}
+                    onClick={() => chooseSpecies(name)}
                   >
                     <b>{name.slice(0, 1)}</b>
                     <strong>{name}</strong>
@@ -475,6 +453,8 @@ export default function GuidedEditor({
                       />
                     ),
                   )}
+                  {(draft.ancestry === "Human" || draft.ancestry === "Elf") && <label className="builder-select"><span>Species-granted skill proficiency</span><select value={speciesSkill} onChange={(event) => setSpeciesSkill(event.target.value)}>{["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception", "History", "Insight", "Intimidation", "Investigation", "Medicine", "Nature", "Perception", "Performance", "Persuasion", "Religion", "Sleight of Hand", "Stealth", "Survival"].map((skill) => <option key={skill}>{skill}</option>)}</select><small>Proficiency adds your proficiency bonus (+{Math.ceil(draft.level / 4) + 1}) to checks using this skill.</small></label>}
+                  <p className="rules-note">In the 2024 rules, species traits normally do not add fixed ability-score bonuses. Your background supplies skills and eligible ability choices; species supplies speed, senses, resistances, and other traits shown above.</p>
                 </div>
               )}
             </>
@@ -492,7 +472,7 @@ export default function GuidedEditor({
                 </div>
               </div>
               <div className="score-methods">
-                {(["standard", "roll", "point"] as const).map((method) => (
+                {(["standard", "roll", "d20", "point"] as const).map((method) => (
                   <button
                     className={scoreMethod === method ? "active" : ""}
                     key={method}
@@ -500,6 +480,7 @@ export default function GuidedEditor({
                       setScoreMethod(method);
                       if (method === "standard") assign(STANDARD_ARRAY);
                       if (method === "roll") assign(rollAbilitySet());
+                      if (method === "d20") assign(Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + 1));
                       if (method === "point") assign([8, 8, 8, 8, 8, 8]);
                     }}
                   >
@@ -507,6 +488,8 @@ export default function GuidedEditor({
                       ? "Standard Array"
                       : method === "roll"
                         ? "Roll 4d6"
+                        : method === "d20"
+                          ? "Roll 1d20 Each"
                         : "Point Buy"}
                   </button>
                 ))}
@@ -543,7 +526,7 @@ export default function GuidedEditor({
                         ))}
                       </select>
                     ) : (
-                      <input
+                      <div className="ability-roll-input"><input
                         type="number"
                         min="1"
                         max="30"
@@ -557,7 +540,7 @@ export default function GuidedEditor({
                             },
                           }))
                         }
-                      />
+                      />{scoreMethod === "d20" && <button type="button" onClick={() => setDraft((current) => ({ ...current, abilities: { ...current.abilities, [ability.key]: Math.floor(Math.random() * 20) + 1 } }))}>Roll d20</button>}</div>
                     )}
                     <b>{draft.abilities[ability.key]}</b>
                     <small>

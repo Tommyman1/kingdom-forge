@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BACKGROUNDS, SPECIES, STARTER_SPELLS } from "../lib/builder2024";
 import { CLASS_RULES, ITEM_CATALOG } from "../lib/rules2024";
+import { featureDescription, spellInfo } from "../lib/rulesContent";
 import type { Hero } from "./page";
 
 export type HomebrewEntry = {
@@ -959,6 +960,7 @@ function MapBoard({
 
 export function CompendiumHub() {
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<{ type: string; name: string; detail: string } | null>(null);
   const records = useMemo(() => {
     const classes = Object.entries(CLASS_RULES).map(([name, data]) => ({
       type: "Class",
@@ -983,7 +985,7 @@ export function CompendiumHub() {
     const spells = Object.values(STARTER_SPELLS)
       .flat()
       .filter((name, index, array) => array.indexOf(name) === index)
-      .map((name) => ({ type: "Spell", name, detail: "Starter spell" }));
+      .map((name) => ({ type: "Spell", name, detail: spellInfo(name).summary }));
     return [...classes, ...items, ...species, ...backgrounds, ...spells];
   }, []);
   const filtered = records.filter((record) =>
@@ -1008,14 +1010,32 @@ export function CompendiumHub() {
           placeholder="Search everything…"
         />
       </div>
+      <div className={`compendium-layout ${selected ? "inspecting" : ""}`}>
       <div className="compendium-grid">
         {filtered.map((record) => (
-          <article key={`${record.type}-${record.name}`}>
+          <button className={selected?.type === record.type && selected?.name === record.name ? "selected" : ""} onClick={() => setSelected(record)} key={`${record.type}-${record.name}`}>
             <small>{record.type}</small>
             <b>{record.name}</b>
             <span>{record.detail}</span>
-          </article>
+            <em>Inspect details →</em>
+          </button>
         ))}
+      </div>
+      {selected && <aside className="compendium-detail">
+        <header><div><small>{selected.type}</small><h2>{selected.name}</h2></div><button aria-label="Close inspector" onClick={() => setSelected(null)}>×</button></header>
+        {selected.type === "Class" && (() => {
+          const rule = CLASS_RULES[selected.name];
+          return <>
+            <div className="archive-facts"><span><b>d{rule.hitDie}</b> Hit Die</span><span><b>{rule.primary}</b> Primary ability</span></div>
+            <section><h3>Subclass choices</h3><p>{rule.subclasses.join(" · ")}</p></section>
+            <section><h3>Features by class level</h3><div className="archive-feature-list">{[...rule.features].sort((a,b) => a.level-b.level).map((feature, index) => <article key={`${feature.level}-${feature.name}-${index}`}><b>Level {feature.level} · {feature.name}</b><p>{featureDescription(feature.name, feature.track)}</p>{feature.track && <small>Uses can be tracked from the character's Actions tab.</small>}</article>)}</div></section>
+          </>;
+        })()}
+        {selected.type === "Species" && (() => { const species = SPECIES[selected.name as keyof typeof SPECIES]; return <><p className="archive-summary">{species.summary}</p><section><h3>Species traits</h3><div className="archive-feature-list">{species.traits.map((trait) => <article key={trait.name}><b>{trait.name}</b><p>{trait.summary}</p></article>)}</div></section></>; })()}
+        {selected.type === "Background" && (() => { const background = BACKGROUNDS[selected.name as keyof typeof BACKGROUNDS]; return <><div className="archive-facts"><span><b>{background.skills}</b> Skill proficiencies</span><span><b>{background.feat}</b> Origin feat</span></div><section><h3>What it changes</h3><p>These skills become proficient, adding your proficiency bonus to their checks. At level 1 that is +2, in addition to the linked ability modifier.</p><p><b>Eligible abilities:</b> {background.abilities}</p><p><b>Tool:</b> {background.tool}</p></section></>; })()}
+        {selected.type === "Spell" && (() => { const spell = spellInfo(selected.name); return <><div className="archive-facts"><span><b>{spell.level === 0 ? "Cantrip" : `Level ${spell.level}`}</b> {spell.school}</span><span><b>{spell.castingTime}</b> Casting time</span></div><section><h3>Spell rules</h3><p>{spell.summary}</p><p><b>Range:</b> {spell.range}</p><p><b>Duration:</b> {spell.duration}{spell.concentration ? " · Concentration" : ""}</p></section></>; })()}
+        {selected.type === "Equipment" && (() => { const item = ITEM_CATALOG.find((entry) => entry.name === selected.name)!; return <><div className="archive-facts"><span><b>{item.cost}</b> Cost</span><span><b>{item.weight} lb</b> Weight</span></div><section><h3>Equipment record</h3><p>Standard adventuring equipment is Common. Add it from Inventory, where you can equip armor and weapons or customize damage and rarity.</p></section></>; })()}
+      </aside>}
       </div>
     </section>
   );

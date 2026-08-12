@@ -5,13 +5,35 @@ import * as THREE from "three";
 
 type DieResult = { sides: number; value: number };
 
+function bipyramidGeometry(radius = 1, height = 1.2, segments = 5) {
+  const positions: number[] = [];
+  const top = [0, height, 0];
+  const bottom = [0, -height, 0];
+  const ring = Array.from({ length: segments * 2 }, (_, index) => {
+    const angle = (index / (segments * 2)) * Math.PI * 2;
+    const y = index % 2 ? -0.13 : 0.13;
+    return [Math.cos(angle) * radius, y, Math.sin(angle) * radius];
+  });
+  const pushFace = (a: number[], b: number[], c: number[]) => positions.push(...a, ...b, ...c);
+  ring.forEach((point, index) => {
+    const next = ring[(index + 1) % ring.length];
+    pushFace(top, point, next);
+    pushFace(bottom, next, point);
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function geometryFor(sides: number) {
-  if (sides === 4) return new THREE.TetrahedronGeometry(0.72);
-  if (sides === 6) return new THREE.BoxGeometry(1.12, 1.12, 1.12);
-  if (sides === 8) return new THREE.OctahedronGeometry(0.78);
-  if (sides === 12) return new THREE.DodecahedronGeometry(0.72);
-  if (sides === 20) return new THREE.IcosahedronGeometry(0.76);
-  return new THREE.CylinderGeometry(0.58, 0.58, 1.05, 10, 1);
+  if (sides === 4) return new THREE.TetrahedronGeometry(1.05);
+  if (sides === 6) return new THREE.BoxGeometry(1.45, 1.45, 1.45);
+  if (sides === 8) return new THREE.OctahedronGeometry(1.15);
+  if (sides === 10 || sides === 100) return bipyramidGeometry(1.05, 1.2, 5);
+  if (sides === 12) return new THREE.DodecahedronGeometry(1.02);
+  if (sides === 20) return new THREE.IcosahedronGeometry(1.08);
+  return new THREE.IcosahedronGeometry(1.08);
 }
 
 function numberSprite(value: number, gold: boolean) {
@@ -38,8 +60,8 @@ function numberSprite(value: number, gold: boolean) {
     depthTest: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(0.9, 0.5, 1);
-  sprite.position.y = 1.02;
+  sprite.scale.set(1.18, 0.66, 1);
+  sprite.position.y = 1.45;
   return { sprite, texture, material };
 }
 
@@ -61,8 +83,8 @@ export default function ThreeDice({
     const materials: THREE.Material[] = [];
     const textures: THREE.Texture[] = [];
     try {
-      const width = Math.min(760, Math.max(320, window.innerWidth - 24));
-      const height = Math.min(520, Math.max(300, window.innerHeight * 0.56));
+      const width = Math.min(1100, Math.max(360, window.innerWidth - 16));
+      const height = Math.min(760, Math.max(420, window.innerHeight * 0.76));
       renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
@@ -73,8 +95,7 @@ export default function ThreeDice({
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       container.appendChild(renderer.domElement);
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-      camera.position.set(0, 0.6, 10.5);
+      const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 100);
       scene.add(new THREE.HemisphereLight(0xe8d8ff, 0x110818, 2.7));
       const key = new THREE.DirectionalLight(0xffd56c, 5);
       key.position.set(4, 5, 7);
@@ -83,9 +104,10 @@ export default function ThreeDice({
       rim.position.set(-5, -2, 5);
       scene.add(rim);
       const shown = dice.slice(0, 24);
+      camera.position.set(0, 0.6, shown.length === 1 ? 7 : shown.length <= 4 ? 9.5 : 12.5);
       const columns = Math.ceil(Math.sqrt(shown.length * 1.45));
       const rows = Math.ceil(shown.length / columns);
-      const spacing = shown.length > 12 ? 1.65 : 2.05;
+      const spacing = shown.length > 12 ? 2.05 : shown.length > 4 ? 2.45 : 2.85;
       const groups = shown.map((dieResult, index) => {
         const group = new THREE.Group();
         const geometry = geometryFor(dieResult.sides);
@@ -133,7 +155,7 @@ export default function ThreeDice({
       });
       const started = performance.now();
       function animate(now: number) {
-        const elapsed = Math.min(1, (now - started) / 1650);
+        const elapsed = Math.min(1, (now - started) / 2200);
         const settle = 1 - Math.pow(1 - elapsed, 4);
         groups.forEach((group, index) => {
           const seed = group.userData.seed as number;
@@ -147,7 +169,8 @@ export default function ThreeDice({
           group.position.y =
             group.userData.startY +
             Math.sin(elapsed * Math.PI) * (1.2 + (index % 3) * 0.12);
-          group.scale.setScalar(0.55 + settle * 0.45);
+          const finalScale = shown.length === 1 ? 1.55 : shown.length <= 4 ? 1.25 : shown.length <= 9 ? 1 : 0.82;
+          group.scale.setScalar(finalScale * (0.48 + settle * 0.52));
         });
         renderer!.render(scene, camera);
         if (elapsed < 1) frame = requestAnimationFrame(animate);
