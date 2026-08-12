@@ -3974,6 +3974,76 @@ input, select, textarea, button { min-width: 0; }
   .three-dice-result strong { font-size: clamp(2.4rem, 18vw, 5rem); }
 }
 
+/* 2.5.4 — balanced character-sheet controls on phones and desktop. */
+.hp-number { justify-content: flex-start; gap: 10px; }
+.hp-number button {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  aspect-ratio: 1;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+.death-saves {
+  grid-column: 1 / -1;
+  grid-template-columns: auto auto auto;
+  justify-content: center;
+  justify-items: center;
+  gap: clamp(18px, 4vw, 42px);
+  text-align: center;
+}
+.death-saves > span { align-self: center; }
+.death-saves label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.death-saves label button {
+  flex: 0 0 18px;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  margin: 0;
+  padding: 0;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+@container character-sheet (max-width: 700px) {
+  .combat-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .combat-row .hp { grid-column: 1 / -1; text-align: center; }
+  .hp-number { justify-content: center; }
+  .death-saves {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 20px;
+    min-height: 118px !important;
+    padding: 16px !important;
+  }
+  .death-saves > span {
+    grid-column: 1 / -1;
+    width: 100%;
+    text-align: center;
+    font-size: 9px;
+  }
+  .death-saves label { font-size: 9px; white-space: normal; }
+  .spell-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+  }
+  .spell-summary article:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+@container character-sheet (max-width: 390px) {
+  .death-saves { grid-template-columns: 1fr; gap: 12px; }
+  .death-saves > span { grid-column: 1; }
+}
+
 @media (hover: none), (pointer: coarse) {
   button, .nav-item, select, input[type="checkbox"], input[type="radio"] { min-height: 44px; }
   .sheet-tabs button, .tool-tabs button { padding-inline: 16px; }
@@ -3987,4 +4057,22 @@ input, select, textarea, button { min-width: 0; }
   .builder-avatar { width: 42px; height: 42px; }
   .builder-steps button { padding-block: 8px; }
   .three-dice-canvas, .dice-pool-canvas { height: 70dvh; }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .hp-number button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+  .death-saves label button {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    aspect-ratio: 1;
+  }
 }

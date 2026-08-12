@@ -1,8 +1,8 @@
 # Kingdom Forge
 
-## Version 2.5.3
+## Version 2.5.4
 
-Kingdom Forge 2.5.3 is the cumulative, Portainer-ready campaign platform. The animated result now remains visible for an additional second after settling. Character groups have a persistent one-click group sort, and the character organizer no longer collapses across the top of Table Mode. Every animated die still settles with its actual rolled face aimed at the camera, with an enlarged gold-and-arcane glow on that result. It retains every earlier character, campaign, rules, account, backup, homebrew, and animated-dice feature.
+Kingdom Forge 2.5.4 is the cumulative, Portainer-ready campaign platform. Death saves are centered on desktop and mobile with true circular touch controls, HP controls remain circular, and the mobile combat and spell summaries use balanced responsive grids. It retains the longer animated result hold, group sorting, corrected Table Mode, camera-facing rolled dice, and every earlier character, campaign, rules, account, backup, homebrew, and animated-dice feature.
 
 Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
 
