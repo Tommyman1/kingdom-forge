@@ -1,8 +1,8 @@
 # Kingdom Forge
 
-## Version 2.3
+## Version 2.4
 
-Kingdom Forge 2.3 is the cumulative, Portainer-ready campaign platform. Its adaptive layout now responds to both the device and the actual space available to each card: wide desktops retain the full dashboard, tablets reflow the sheet and dice tray, and phones gain horizontal touch navigation, full-screen builders, safe-area-aware controls, and larger tap targets. Landscape and short-height displays remain usable without clipped dialogs. It retains all 2.2 rules mechanics, species benefits, enforced choice and spell limits, campaign, account, security, backup, homebrew, animated dice, and table tools.
+Kingdom Forge 2.4 is the cumulative, Portainer-ready campaign platform. This finishing release repairs cramped combat resources, death saves, conditions, exhaustion controls, and the resource-counter creator at narrow widths. Table mode now has a deliberate play-screen header, clearer card depth, sticky desktop dice and character tabs, and a prominent responsive exit. It retains the complete 2.3 adaptive layout and every earlier character, campaign, rules, account, backup, homebrew, and animated-dice feature.
 
 Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
 

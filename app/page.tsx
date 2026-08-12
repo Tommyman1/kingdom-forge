@@ -1307,12 +1307,12 @@ function ResourceManager({
         <h3>Resource Counters</h3>
         <span>These counters appear directly above in the combat resource row. Press − when you spend a use and + to restore one. A Short or Long Rest automatically refills counters matching that reset type. Class features acquired during level-up create counters here when they have limited uses.</span>
       </div>
-      <input value={name} placeholder="Resource name" onChange={(event) => setName(event.target.value)} />
-      <input type="number" min={1} max={99} value={max} onChange={(event) => setMax(Math.max(1, Number(event.target.value)))} />
-      <select value={resetsOn} onChange={(event) => setResetsOn(event.target.value as "short" | "long")}>
+      <label className="resource-field resource-name-field"><span>Name</span><input value={name} placeholder="Example: Bardic Inspiration" onChange={(event) => setName(event.target.value)} /></label>
+      <label className="resource-field"><span>Maximum uses</span><input type="number" min={1} max={99} value={max} onChange={(event) => setMax(Math.max(1, Number(event.target.value)))} /></label>
+      <label className="resource-field"><span>Rest recovery</span><select value={resetsOn} onChange={(event) => setResetsOn(event.target.value as "short" | "long")}>
         <option value="short">Short rest</option>
         <option value="long">Long rest</option>
-      </select>
+      </select></label>
       <button className="primary" onClick={add}>Create Counter</button>
       {!!hero.resources?.length && (
         <div className="resource-list">
