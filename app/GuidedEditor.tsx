@@ -9,12 +9,14 @@ import {
 } from "../lib/builder2024";
 import {
   CLASS_RULES,
+  CLASS_SAVES,
+  CLASS_SKILLS,
   ITEM_CATALOG,
   rollAbilitySet,
   STANDARD_ARRAY,
 } from "../lib/rules2024";
 import type { AbilityKey, Hero, Item, Spell } from "./page";
-import { featureDescription, preparedSpellLimit, spellInfo } from "../lib/rulesContent";
+import { cantripKnownLimit, featureDescription, preparedSpellLimit, spellInfo } from "../lib/rulesContent";
 
 type Step = "class" | "background" | "species" | "abilities" | "equipment";
 const STEPS: { key: Step; label: string }[] = [
@@ -32,6 +34,7 @@ const abilityKeys: { key: AbilityKey; label: string }[] = [
   { key: "wis", label: "Wisdom" },
   { key: "cha", label: "Charisma" },
 ];
+const abilityNameToKey: Record<string, AbilityKey> = { Strength: "str", Dexterity: "dex", Constitution: "con", Intelligence: "int", Wisdom: "wis", Charisma: "cha" };
 
 export default function GuidedEditor({
   hero,
@@ -48,7 +51,15 @@ export default function GuidedEditor({
   const [scoreMethod, setScoreMethod] = useState<"standard" | "roll" | "d20" | "point">(
     "standard",
   );
-  const [speciesSkill, setSpeciesSkill] = useState("Perception");
+  const [speciesSkill, setSpeciesSkill] = useState(hero.speciesChoices?.skill ?? "Perception");
+  const [speciesSize, setSpeciesSize] = useState(hero.speciesChoices?.size ?? "Medium");
+  const [speciesLineage, setSpeciesLineage] = useState(hero.speciesChoices?.lineage ?? "");
+  const [speciesFeat, setSpeciesFeat] = useState(hero.speciesChoices?.originFeat ?? "Alert");
+  const [classSkills, setClassSkills] = useState(() => new Set((hero.classSkillProficiencies ?? []).filter((skill) => CLASS_SKILLS[hero.className]?.choices.includes(skill)).slice(0, CLASS_SKILLS[hero.className]?.count ?? 2)));
+  const backgroundData = BACKGROUNDS[hero.background as keyof typeof BACKGROUNDS] ?? BACKGROUNDS.Soldier;
+  const initialBackgroundAbilities = backgroundData?.abilities.split(", ") ?? ["Strength", "Dexterity", "Constitution"];
+  const [backgroundPrimary, setBackgroundPrimary] = useState(initialBackgroundAbilities[0]);
+  const [backgroundSecondary, setBackgroundSecondary] = useState(initialBackgroundAbilities[1]);
   const [selectedGear, setSelectedGear] = useState(
     () => new Set(hero.inventory.map((item) => item.name)),
   );
@@ -78,12 +89,20 @@ export default function GuidedEditor({
   const castingKey: AbilityKey = rule.primary.includes("Intelligence") ? "int" : rule.primary.includes("Wisdom") ? "wis" : "cha";
   const preparedLimit = preparedSpellLimit(draft.className, draft.level, Math.floor((draft.abilities[castingKey] - 10) / 2));
   const preparedCount = draft.spells.filter((spell) => spell.prepared && spell.level > 0).length;
+  const cantripLimit = cantripKnownLimit(draft.className, draft.level);
+  const cantripCount = draft.spells.filter((spell) => spell.level === 0 && !(draft.speciesGrantedSpells ?? []).includes(spell.name)).length;
+  const selectedSpecies = SPECIES[draft.ancestry];
+  const classSkillRule = CLASS_SKILLS[draft.className] ?? { count: 2, choices: [] };
   const warnings = [
     !draft.name.trim() && "Character name is required.",
     !draft.className && "Choose a class.",
+    !BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS] && "Choose a supported background.",
     draft.level >= 3 && !draft.subclass && "Choose a subclass for this level.",
     scoreMethod === "point" && pointSpent > 27 && `Point buy is ${pointSpent - 27} points over budget.`,
     draft.skillProficiency.length < 2 && "Choose at least two skill proficiencies.",
+    Boolean(selectedSpecies?.lineages?.length) && !speciesLineage && "Choose a species lineage or ancestry.",
+    classSkills.size !== classSkillRule.count && `Choose exactly ${classSkillRule.count} ${draft.className} skill proficiencies (${classSkills.size}/${classSkillRule.count}).`,
+    backgroundPrimary === backgroundSecondary && "Background ability increases must use two different abilities.",
   ].filter(Boolean) as string[];
   function set<K extends keyof Hero>(key: K, value: Hero[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -103,18 +122,35 @@ export default function GuidedEditor({
       className,
       subclass: current.level >= 3 ? next.subclasses[0] : "",
       spells: [],
+      proficiency: (CLASS_SAVES[className] ?? ["str", "con"]) as AbilityKey[],
     }));
+    setClassSkills(new Set());
     setOpen("");
   }
   function chooseBackground(background: string) {
     const everyBackgroundSkill = new Set(Object.values(BACKGROUNDS).flatMap((item) => item.skills.split(", ")));
     const granted = BACKGROUNDS[background as keyof typeof BACKGROUNDS].skills.split(", ");
     setDraft((current) => ({ ...current, background, skillProficiency: [...new Set([...current.skillProficiency.filter((skill) => !everyBackgroundSkill.has(skill)), ...granted])] }));
+    const eligible = BACKGROUNDS[background as keyof typeof BACKGROUNDS].abilities.split(", ");
+    setBackgroundPrimary(eligible[0]);
+    setBackgroundSecondary(eligible[1]);
+  }
+  function toggleClassSkill(skill: string) {
+    setClassSkills((current) => {
+      const next = new Set(current);
+      if (next.has(skill)) next.delete(skill);
+      else if (next.size < classSkillRule.count) next.add(skill);
+      else window.alert(`You can choose exactly ${classSkillRule.count} ${draft.className} skills. Remove one before selecting another.`);
+      return next;
+    });
   }
   function chooseSpecies(ancestry: string) {
-    const species = SPECIES[ancestry as keyof typeof SPECIES];
-    const speedTrait = species.traits.find((trait) => trait.name === "Speed")?.summary.match(/\d+/)?.[0];
-    setDraft((current) => ({ ...current, ancestry, speed: speedTrait ? Number(speedTrait) : current.speed }));
+    const species = SPECIES[ancestry];
+    setSpeciesSize(species.sizeOptions[0]);
+    setSpeciesSkill(species.skillChoices?.[0] ?? "Perception");
+    setSpeciesLineage(species.lineages?.[0]?.name ?? "");
+    setSpeciesFeat(species.originFeatChoices?.[0] ?? "Alert");
+    setDraft((current) => ({ ...current, ancestry, speed: species.speed }));
   }
   function assign(values: number[]) {
     setDraft((current) => ({
@@ -127,7 +163,8 @@ export default function GuidedEditor({
   function toggleSpell(name: string) {
     const found = draft.spells.find((spell) => spell.name === name);
     const info = spellInfo(name);
-    if (!found && info.level > 0 && preparedCount >= preparedLimit) return window.alert(`Preparation limit reached (${preparedLimit}). Unprepare another leveled spell first.`);
+    if (!found && info.level > 0 && preparedCount >= preparedLimit) return window.alert(`Preparation limit reached (${preparedCount}/${preparedLimit}). Unprepare another leveled spell first.`);
+    if (!found && info.level === 0 && cantripCount >= cantripLimit) return window.alert(`Cantrip limit reached (${cantripCount}/${cantripLimit}). Remove a cantrip before choosing another.`);
     const spells = found
       ? draft.spells.filter((spell) => spell.name !== name)
       : [
@@ -167,8 +204,34 @@ export default function GuidedEditor({
       equipped: false,
       category: "gear",
     }));
-    const speciesGrantsSkill = draft.ancestry === "Human" || draft.ancestry === "Elf";
-    onSave({ ...draft, skillProficiency: speciesGrantsSkill ? [...new Set([...draft.skillProficiency, speciesSkill])] : draft.skillProficiency, inventory: [...existingCustom, ...known] });
+    const species = SPECIES[draft.ancestry];
+    const lineage = species.lineages?.find((item) => item.name === speciesLineage);
+    const oldSkill = draft.speciesChoices?.skill;
+    const background = BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS] ?? BACKGROUNDS.Soldier;
+    const backgroundSkills = background.skills.split(", ");
+    const oldSourcedSkills = new Set([...(draft.classSkillProficiencies ?? []), ...(draft.backgroundGrantedSkills ?? []), ...(oldSkill ? [oldSkill] : [])]);
+    const skillProficiency = [...new Set([...draft.skillProficiency.filter((skill) => !oldSourcedSkills.has(skill)), ...classSkills, ...backgroundSkills, ...(species.skillChoices ? [speciesSkill] : [])])];
+    const oldSpeciesSpells = new Set(draft.speciesGrantedSpells ?? []);
+    const grantedSpellNames = [...new Set([...(species.fixedSpells ?? []), ...(lineage?.spells ?? [])].filter((spell) => spell.requiredLevel <= draft.level).map((spell) => spell.name))];
+    const spellsWithoutOldSpecies = draft.spells.filter((spell) => !oldSpeciesSpells.has(spell.name));
+    const grantedSpells: Spell[] = grantedSpellNames.map((name, index) => { const info = spellInfo(name); return { id: Date.now() + 500 + index, name, level: info.level, school: info.school, prepared: true, description: info.summary }; });
+    const speciesResourceNames = new Set(Object.values(SPECIES).flatMap((item) => item.resource ? [item.resource.name] : []));
+    const resources = (draft.resources ?? []).filter((resource) => !speciesResourceNames.has(resource.name));
+    if (species.resource) resources.push({ id: Date.now() + 900, name: species.resource.name, current: species.resource.max === "proficiency" ? Math.ceil(draft.level / 4) + 1 : species.resource.max, max: species.resource.max === "proficiency" ? Math.ceil(draft.level / 4) + 1 : species.resource.max, resetsOn: species.resource.resetsOn });
+    const oldSpeciesResistances = new Set(draft.speciesResistances ?? []);
+    const speciesResistances = [...new Set([...(species.resistances ?? []), ...(lineage?.resistance ? [lineage.resistance] : [])])];
+    const resistances = [...new Set([...(draft.resistances ?? []).filter((entry) => !oldSpeciesResistances.has(entry)), ...speciesResistances])];
+    const feats = (draft.feats ?? []).filter((feat) => feat.name !== draft.speciesGrantedFeat && feat.name !== draft.backgroundGrantedFeat);
+    feats.push({ id: Date.now() + 940, name: background.feat, description: `${background.feat} is granted by the ${draft.background} background.` });
+    if (species.originFeatChoices) feats.push({ id: Date.now() + 950, name: speciesFeat, description: `${speciesFeat} is granted by Human Versatile. Its benefits are shown under Features and Traits.` });
+    const abilities = { ...draft.abilities };
+    Object.entries(draft.backgroundAbilityBonuses ?? {}).forEach(([key, bonus]) => { abilities[key as AbilityKey] -= bonus ?? 0; });
+    const primaryKey = abilityNameToKey[backgroundPrimary];
+    const secondaryKey = abilityNameToKey[backgroundSecondary];
+    const backgroundAbilityBonuses: Partial<Record<AbilityKey, number>> = { [primaryKey]: 2, [secondaryKey]: 1 };
+    abilities[primaryKey] = Math.min(20, abilities[primaryKey] + 2);
+    abilities[secondaryKey] = Math.min(20, abilities[secondaryKey] + 1);
+    onSave({ ...draft, abilities, backgroundAbilityBonuses, backgroundGrantedSkills: backgroundSkills, backgroundGrantedFeat: background.feat, backgroundTool: background.tool, classSkillProficiencies: [...classSkills], size: speciesSize, speed: lineage?.speed ?? species.speed, darkvision: species.darkvision ?? 0, conditionAdvantages: species.conditionAdvantages ?? [], carryingMultiplier: species.carryingMultiplier ?? 1, longRestHours: species.longRestHours ?? 8, speciesChoices: { size: speciesSize, skill: species.skillChoices ? speciesSkill : undefined, lineage: speciesLineage || undefined, originFeat: species.originFeatChoices ? speciesFeat : undefined }, speciesResistances, speciesGrantedSpells: grantedSpellNames, speciesGrantedFeat: species.originFeatChoices ? speciesFeat : undefined, skillProficiency, spells: [...spellsWithoutOldSpecies, ...grantedSpells], resources, resistances, feats, inventory: [...existingCustom, ...known] });
   }
   return (
     <div className="builder-backdrop">
@@ -262,6 +325,12 @@ export default function GuidedEditor({
                   </button>
                 ))}
               </div>
+              <section className="required-choice-panel">
+                <header><div><p>REQUIRED CLASS CHOICE</p><h3>Skill proficiencies</h3></div><strong className={classSkills.size === classSkillRule.count ? "complete" : ""}>{classSkills.size} / {classSkillRule.count}</strong></header>
+                <span>Choose exactly {classSkillRule.count}. The counter updates immediately and further choices lock at the limit.</span>
+                <div className="limited-choice-grid">{classSkillRule.choices.map((skill) => { const selected = classSkills.has(skill); const locked = !selected && classSkills.size >= classSkillRule.count; return <button type="button" key={skill} className={selected ? "selected" : ""} disabled={locked} onClick={() => toggleClassSkill(skill)}><i>{selected ? "✓" : "+"}</i>{skill}</button>; })}</div>
+                <small>Saving throws applied by {draft.className}: {(CLASS_SAVES[draft.className] ?? []).map((key) => key.toUpperCase()).join(" and ")}.</small>
+              </section>
               <div className="builder-split">
                 <section>
                   <div className="builder-section-tabs">
@@ -325,11 +394,10 @@ export default function GuidedEditor({
                   {spellNames.length ? (
                     <>
                       <div className="prepared-heading">
-                        <strong>
-                          Prepared leveled spells {preparedCount} / {preparedLimit}
-                        </strong>
+                        <strong>Spell choices</strong>
+                        <div className="spell-choice-counters"><b className={preparedCount >= preparedLimit ? "full" : ""}>Leveled prepared {preparedCount} / {preparedLimit}</b>{cantripLimit > 0 && <b className={cantripCount >= cantripLimit ? "full" : ""}>Cantrips known {cantripCount} / {cantripLimit}</b>}</div>
                         <span>
-                          Choose the spells this character knows or prepares.
+                          Each selection immediately increases its counter. At the limit, unselected choices lock until you remove one.
                         </span>
                       </div>
                       <div className="spell-picker">
@@ -337,20 +405,24 @@ export default function GuidedEditor({
                           const selected = draft.spells.some(
                             (spell) => spell.name === name,
                           );
+                          const info = spellInfo(name);
+                          const atLimit = !selected && (info.level === 0 ? cantripCount >= cantripLimit : preparedCount >= preparedLimit);
                           return (
                             <button
                               key={name}
-                              className={selected ? "selected" : ""}
+                              className={`${selected ? "selected" : ""} ${atLimit ? "choice-locked" : ""}`}
+                              disabled={atLimit}
                               onClick={() => toggleSpell(name)}
                             >
                               <i>{selected ? "✓" : "+"}</i>
                               <span>
                                 <b>{name}</b>
                                 <small>
-                                  {spellInfo(name).level === 0 ? "Cantrip" : `${spellInfo(name).level}${ordinal(spellInfo(name).level)} Level`} · {spellInfo(name).school}
+                                  {info.level === 0 ? "Cantrip" : `${info.level}${ordinal(info.level)} Level`} · {info.school}
                                 </small>
-                                <small>{spellInfo(name).castingTime} · {spellInfo(name).range} · {spellInfo(name).duration}{spellInfo(name).concentration ? " · Concentration" : ""}</small>
-                                <p>{spellInfo(name).summary}</p>
+                                <small>{info.castingTime} · {info.range} · {info.duration}{info.concentration ? " · Concentration" : ""}</small>
+                                <p>{info.summary}</p>
+                                {atLimit && <em>Limit reached—remove another {info.level === 0 ? "cantrip" : "prepared spell"} first.</em>}
                               </span>
                             </button>
                           );
@@ -406,6 +478,7 @@ export default function GuidedEditor({
                       summary={value}
                     />
                   ))}
+                  <section className="required-choice-panel background-boosts"><header><div><p>REQUIRED BACKGROUND CHOICE</p><h3>Ability increases</h3></div><strong>+3 total</strong></header><span>The background adds +2 to one eligible ability and +1 to a different eligible ability. These are applied when you save.</span><div className="background-ability-selects"><label><span>Increase by +2</span><select value={backgroundPrimary} onChange={(event) => setBackgroundPrimary(event.target.value)}>{BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS].abilities.split(", ").map((ability) => <option key={ability} disabled={ability === backgroundSecondary}>{ability}</option>)}</select></label><label><span>Increase by +1</span><select value={backgroundSecondary} onChange={(event) => setBackgroundSecondary(event.target.value)}>{BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS].abilities.split(", ").map((ability) => <option key={ability} disabled={ability === backgroundPrimary}>{ability}</option>)}</select></label></div><div className="benefit-preview"><b>Applied benefits</b><span>{backgroundPrimary} +2 · {backgroundSecondary} +1</span><span>Skills: {BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS].skills} (each gains +{Math.ceil(draft.level / 4) + 1} proficiency)</span><span>Feat: {BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS].feat}</span><span>Tool: {BACKGROUNDS[draft.background as keyof typeof BACKGROUNDS].tool}</span></div></section>
                 </div>
               )}
             </>
@@ -435,13 +508,13 @@ export default function GuidedEditor({
                   </button>
                 ))}
               </div>
-              {SPECIES[draft.ancestry as keyof typeof SPECIES] && (
+              {selectedSpecies && (
                 <div className="selection-detail">
                   <h3>{draft.ancestry} Traits</h3>
                   <p>
-                    {SPECIES[draft.ancestry as keyof typeof SPECIES].summary}
+                    {selectedSpecies.summary}
                   </p>
-                  {SPECIES[draft.ancestry as keyof typeof SPECIES].traits.map(
+                  {selectedSpecies.traits.map(
                     (trait) => (
                       <FeatureCard
                         key={trait.name}
@@ -453,7 +526,14 @@ export default function GuidedEditor({
                       />
                     ),
                   )}
-                  {(draft.ancestry === "Human" || draft.ancestry === "Elf") && <label className="builder-select"><span>Species-granted skill proficiency</span><select value={speciesSkill} onChange={(event) => setSpeciesSkill(event.target.value)}>{["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception", "History", "Insight", "Intimidation", "Investigation", "Medicine", "Nature", "Perception", "Performance", "Persuasion", "Religion", "Sleight of Hand", "Stealth", "Survival"].map((skill) => <option key={skill}>{skill}</option>)}</select><small>Proficiency adds your proficiency bonus (+{Math.ceil(draft.level / 4) + 1}) to checks using this skill.</small></label>}
+                  <div className="species-required-choices">
+                    <h4>Required species choices</h4>
+                    {selectedSpecies.sizeOptions.length > 1 && <label className="builder-select"><span>Size</span><select value={speciesSize} onChange={(event) => setSpeciesSize(event.target.value)}>{selectedSpecies.sizeOptions.map((size) => <option key={size}>{size}</option>)}</select></label>}
+                    {selectedSpecies.lineages?.length && <label className="builder-select"><span>Lineage / ancestry</span><select value={speciesLineage} onChange={(event) => setSpeciesLineage(event.target.value)}>{selectedSpecies.lineages.map((lineage) => <option key={lineage.name} value={lineage.name}>{lineage.name} — {lineage.benefit}</option>)}</select></label>}
+                    {selectedSpecies.skillChoices?.length && <label className="builder-select"><span>Species-granted skill proficiency</span><select value={speciesSkill} onChange={(event) => setSpeciesSkill(event.target.value)}>{selectedSpecies.skillChoices.map((skill) => <option key={skill}>{skill}</option>)}</select><small>{speciesSkill}: ability modifier + proficiency bonus (+{Math.ceil(draft.level / 4) + 1}). This is added to the finished sheet.</small></label>}
+                    {selectedSpecies.originFeatChoices?.length && <label className="builder-select"><span>Human Versatile origin feat</span><select value={speciesFeat} onChange={(event) => setSpeciesFeat(event.target.value)}>{selectedSpecies.originFeatChoices.map((feat) => <option key={feat}>{feat}</option>)}</select><small>The selected feat is added under Features & Traits.</small></label>}
+                  </div>
+                  <div className="species-impact"><h4>Benefits applied to the character</h4><ul><li>Size: {speciesSize}</li><li>Walking speed: {selectedSpecies.lineages?.find((lineage) => lineage.name === speciesLineage)?.speed ?? selectedSpecies.speed} ft</li>{selectedSpecies.darkvision ? <li>Darkvision: {selectedSpecies.darkvision} ft</li> : null}{selectedSpecies.resistances?.map((value) => <li key={value}>Damage resistance: {value}</li>)}{selectedSpecies.lineages?.find((lineage) => lineage.name === speciesLineage)?.resistance && <li>Damage resistance: {selectedSpecies.lineages.find((lineage) => lineage.name === speciesLineage)?.resistance}</li>}{selectedSpecies.conditionAdvantages?.map((value) => <li key={value}>Advantage: {value}</li>)}{selectedSpecies.carryingMultiplier && selectedSpecies.carryingMultiplier > 1 ? <li>Carrying capacity multiplier: ×{selectedSpecies.carryingMultiplier}</li> : null}{selectedSpecies.longRestHours ? <li>Long Rest duration: {selectedSpecies.longRestHours} hours</li> : null}{selectedSpecies.resource && <li>{selectedSpecies.resource.name}: {selectedSpecies.resource.max === "proficiency" ? Math.ceil(draft.level / 4) + 1 : selectedSpecies.resource.max} uses, {selectedSpecies.resource.activation}, restores on {selectedSpecies.resource.resetsOn} rest</li>}{[...(selectedSpecies.fixedSpells ?? []), ...(selectedSpecies.lineages?.find((lineage) => lineage.name === speciesLineage)?.spells ?? [])].map((spell) => <li key={`${spell.name}-${spell.requiredLevel}`}>{spell.requiredLevel <= draft.level ? "Granted" : `Unlocks at level ${spell.requiredLevel}`}: {spell.name}</li>)}</ul><p>Saving the builder writes every listed benefit into Core statistics, Features, Spells, defenses, and Resource Counters where relevant.</p></div>
                   <p className="rules-note">In the 2024 rules, species traits normally do not add fixed ability-score bonuses. Your background supplies skills and eligible ability choices; species supplies speed, senses, resistances, and other traits shown above.</p>
                 </div>
               )}

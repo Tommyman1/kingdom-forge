@@ -1,8 +1,8 @@
 # Kingdom Forge
 
-## Version 2.1
+## Version 2.3
 
-Kingdom Forge 2.1 is the cumulative, Portainer-ready campaign platform. This polish release adds a roomy dice-pool selector, larger and more consistent Three.js dice, a focused table layout with an always-visible exit, inspectable compendium records, explained class features and spells, prepared-spell limits, item rarities, visible short-rest history, clearer resource tracking, direct XP awards, background/species impact summaries, and individual d20 ability rolling. It retains all 2.0 campaign, account, security, backup, homebrew, and table tools.
+Kingdom Forge 2.3 is the cumulative, Portainer-ready campaign platform. Its adaptive layout now responds to both the device and the actual space available to each card: wide desktops retain the full dashboard, tablets reflow the sheet and dice tray, and phones gain horizontal touch navigation, full-screen builders, safe-area-aware controls, and larger tap targets. Landscape and short-height displays remain usable without clipped dialogs. It retains all 2.2 rules mechanics, species benefits, enforced choice and spell limits, campaign, account, security, backup, homebrew, animated dice, and table tools.
 
 Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
 

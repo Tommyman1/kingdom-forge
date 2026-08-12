@@ -18,7 +18,7 @@ import {
 } from "../lib/rules2024";
 import GuidedEditor from "./GuidedEditor";
 import LevelUpWizard from "./LevelUpWizard";
-import { featureDescription, preparedSpellLimit, spellInfo } from "../lib/rulesContent";
+import { cantripKnownLimit, featureDescription, preparedSpellLimit, spellInfo } from "../lib/rulesContent";
 import { BACKGROUNDS, SPECIES } from "../lib/builder2024";
 import {
   AdminHub,
@@ -134,6 +134,20 @@ export type Hero = {
   immunities?: string[];
   vulnerabilities?: string[];
   shortRestsSinceLong?: number;
+  size?: string;
+  darkvision?: number;
+  conditionAdvantages?: string[];
+  carryingMultiplier?: number;
+  longRestHours?: number;
+  speciesChoices?: { size?: string; skill?: string; lineage?: string; originFeat?: string };
+  speciesResistances?: string[];
+  speciesGrantedSpells?: string[];
+  speciesGrantedFeat?: string;
+  classSkillProficiencies?: string[];
+  backgroundGrantedSkills?: string[];
+  backgroundGrantedFeat?: string;
+  backgroundTool?: string;
+  backgroundAbilityBonuses?: Partial<Record<AbilityKey, number>>;
 };
 
 type HeroSnapshot = { id: number; heroId: number; savedAt: string; hero: Hero };
@@ -216,6 +230,17 @@ function makeHero(id = Date.now()): Hero {
     immunities: [],
     vulnerabilities: [],
     shortRestsSinceLong: 0,
+    size: "Medium",
+    darkvision: 0,
+    conditionAdvantages: [],
+    carryingMultiplier: 1,
+    longRestHours: 8,
+    speciesChoices: { size: "Medium", skill: "Perception", originFeat: "Alert" },
+    speciesResistances: [],
+    speciesGrantedSpells: [],
+    classSkillProficiencies: ["Athletics", "Perception"],
+    backgroundGrantedSkills: [],
+    backgroundAbilityBonuses: {},
     spellSlots: {
       1: { used: 0, max: 0 },
       2: { used: 0, max: 0 },
@@ -589,6 +614,7 @@ export default function Home() {
         current: resource.max,
       })),
       shortRestsSinceLong: 0,
+      inspiration: hero.ancestry === "Human" ? true : hero.inspiration,
     });
     setToast("Long rest complete");
   }
@@ -1077,6 +1103,7 @@ export default function Home() {
                     <article><b>Initiative {signed(mod(hero.abilities.dex))}</b><span>Dexterity modifier from score {hero.abilities.dex}</span></article>
                     <article><b>Proficiency +{proficiencyBonus}</b><span>Calculated from total character level {hero.level}</span></article>
                     <article><b>Spell save DC {8 + proficiencyBonus + mod(hero.abilities[castingAbility(hero)])}</b><span>8 + proficiency + {castingAbility(hero).toUpperCase()} modifier</span></article>
+                    <article><b>{hero.size ?? "Medium"} · {hero.speed} ft</b><span>{hero.darkvision ? `Darkvision ${hero.darkvision} ft` : "No species darkvision"}{(hero.carryingMultiplier ?? 1) > 1 ? ` · Carrying ×${hero.carryingMultiplier}` : ""}</span></article>
                   </div>
                 </details>
                 <div className="resource-row">
@@ -1818,7 +1845,10 @@ function SpellsTab({
   const casting = mod(hero.abilities[castingKey]);
   const prof = Math.ceil(hero.level / 4) + 1;
   const preparationLimit = preparedSpellLimit(hero.className, hero.level, casting);
-  const preparedLeveled = hero.spells.filter((spell) => spell.prepared && spell.level > 0).length;
+  const speciesSpells = new Set(hero.speciesGrantedSpells ?? []);
+  const preparedLeveled = hero.spells.filter((spell) => spell.prepared && spell.level > 0 && !speciesSpells.has(spell.name)).length;
+  const cantripLimit = cantripKnownLimit(hero.className, hero.level);
+  const knownCantrips = hero.spells.filter((spell) => spell.level === 0 && !speciesSpells.has(spell.name)).length;
   function useSlot(level: number) {
     const slot = hero.spellSlots[level];
     if (!slot?.max) return;
@@ -1851,11 +1881,12 @@ function SpellsTab({
           </button>
         </article>
         <article>
-          <span>PREPARED</span>
+          <span>LEVELED PREPARED</span>
           <strong>
             {preparedLeveled} / {preparationLimit}
           </strong>
         </article>
+        <article><span>CANTRIPS KNOWN</span><strong>{knownCantrips} / {cantripLimit}</strong></article>
       </div>
       <div className="slot-row">
         {Object.entries(hero.spellSlots).map(([level, slot]) => (
@@ -2366,6 +2397,7 @@ function FeaturesTab({
         </div>
         {classFeatures.map((feature) => <article className="feature-card" key={`${feature.level}-${feature.name}`}><span>{hero.className.toUpperCase()} · LEVEL {feature.level}{feature.track ? " · LIMITED USE" : " · PASSIVE/AVAILABLE"}</span><h4>{feature.name}</h4><p>{featureDescription(feature.name, Boolean(feature.track))}</p></article>)}
         {species?.traits.map((trait) => <article className="feature-card species" key={trait.name}><span>{hero.ancestry.toUpperCase()} TRAIT</span><h4>{trait.name}</h4><p>{trait.summary}</p></article>)}
+        {species && <article className="feature-card species species-mechanics"><span>{hero.ancestry.toUpperCase()} · APPLIED MECHANICS</span><h4>Your species benefits</h4><p>Size {hero.size ?? species.sizeOptions[0]} · Speed {hero.speed} ft{hero.darkvision ? ` · Darkvision ${hero.darkvision} ft` : ""}{(hero.carryingMultiplier ?? 1) > 1 ? ` · Carrying capacity ×${hero.carryingMultiplier}` : ""}{hero.longRestHours && hero.longRestHours < 8 ? ` · Long Rest ${hero.longRestHours} hours` : ""}.</p>{hero.speciesChoices?.lineage && <p><b>Lineage:</b> {hero.speciesChoices.lineage}</p>}{hero.speciesChoices?.skill && <p><b>Granted proficiency:</b> {hero.speciesChoices.skill} (+{Math.ceil(hero.level / 4) + 1} proficiency).</p>}{(hero.speciesResistances ?? []).length > 0 && <p><b>Resistances:</b> {hero.speciesResistances?.join(", ")}.</p>}{(hero.conditionAdvantages ?? []).length > 0 && <p><b>Advantage:</b> {hero.conditionAdvantages?.join("; ")}.</p>}{(hero.speciesGrantedSpells ?? []).length > 0 && <p><b>Innate spells:</b> {hero.speciesGrantedSpells?.join(", ")}. These do not count against class spell choices.</p>}</article>}
         {background && <article className="feature-card background"><span>{hero.background.toUpperCase()} BACKGROUND</span><h4>{background.feat}</h4><p>Granted skills: {background.skills}. Each proficient skill adds your proficiency bonus (+{Math.ceil(hero.level / 4) + 1}) to its ability check. Tool: {background.tool}. Eligible abilities: {background.abilities}.</p></article>}
         {(hero.feats ?? []).map((feat) => <article className="feature-card feat" key={feat.id}><span>FEAT</span><h4>{feat.name}</h4><p>{feat.description}</p></article>)}
       </section>

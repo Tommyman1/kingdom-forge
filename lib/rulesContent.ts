@@ -52,6 +52,19 @@ export const SPELL_DETAILS: Record<string, SpellInfo> = {
   Guidance: { level: 0, school: "Divination", castingTime: "Action", range: "Touch", duration: "1 minute", concentration: true, summary: "Help a creature improve an eligible ability check." },
   "Sacred Flame": { level: 0, school: "Evocation", castingTime: "Action", range: "60 ft", duration: "Instant", summary: "Radiant fire targets a creature's Dexterity save." },
   Thaumaturgy: { level: 0, school: "Transmutation", castingTime: "Action", range: "30 ft", duration: "Up to 1 minute", summary: "Produce a minor supernatural sign such as an altered voice or harmless tremor." },
+  Prestidigitation: { level: 0, school: "Transmutation", castingTime: "Action", range: "10 ft", duration: "Up to 1 hour", summary: "Create one of several harmless minor magical effects." },
+  "Minor Illusion": { level: 0, school: "Illusion", castingTime: "Action", range: "30 ft", duration: "1 minute", summary: "Create a brief sound or image that creatures can investigate." },
+  "Poison Spray": { level: 0, school: "Necromancy", castingTime: "Action", range: "30 ft", duration: "Instant", summary: "Project poisonous magic at a creature that fails its Constitution save." },
+  Darkness: { level: 2, school: "Evocation", castingTime: "Action", range: "60 ft", duration: "10 minutes", concentration: true, summary: "Create an area of magical darkness that blocks ordinary darkvision." },
+  "Detect Magic": { level: 1, school: "Divination", castingTime: "Action", range: "Self", duration: "10 minutes", concentration: true, summary: "Sense nearby magic and learn its school when visible." },
+  "Misty Step": { level: 2, school: "Conjuration", castingTime: "Bonus Action", range: "Self", duration: "Instant", summary: "Teleport to an unoccupied space you can see." },
+  Longstrider: { level: 1, school: "Transmutation", castingTime: "Action", range: "Touch", duration: "1 hour", summary: "Increase a creature's Speed for the duration." },
+  "Pass without Trace": { level: 2, school: "Abjuration", castingTime: "Action", range: "Self", duration: "1 hour", concentration: true, summary: "Veil nearby companions to greatly improve their Stealth checks." },
+  "Ray of Sickness": { level: 1, school: "Necromancy", castingTime: "Action", range: "60 ft", duration: "Instant", summary: "Make a poisonous spell attack that can Poison its target." },
+  "Hold Person": { level: 2, school: "Enchantment", castingTime: "Action", range: "60 ft", duration: "1 minute", concentration: true, summary: "Attempt to Paralyze a humanoid that fails its Wisdom save." },
+  "False Life": { level: 1, school: "Necromancy", castingTime: "Action", range: "Self", duration: "Instant", summary: "Fortify yourself with temporary hit points." },
+  "Ray of Enfeeblement": { level: 2, school: "Necromancy", castingTime: "Action", range: "60 ft", duration: "1 minute", concentration: true, summary: "Weaken a creature's Strength-based weapon damage." },
+  "Hellish Rebuke": { level: 1, school: "Evocation", castingTime: "Reaction", range: "60 ft", duration: "Instant", summary: "Answer damage with supernatural fire against the attacker." },
   Bless: { level: 1, school: "Enchantment", castingTime: "Action", range: "30 ft", duration: "1 minute", concentration: true, summary: "Bolster several creatures' attacks and saving throws." },
   "Guiding Bolt": { level: 1, school: "Evocation", castingTime: "Action", range: "120 ft", duration: "1 round", summary: "Make a radiant spell attack that can help the next attacker." },
   Druidcraft: { level: 0, school: "Transmutation", castingTime: "Action", range: "30 ft", duration: "Instant", summary: "Create a small natural or weather-related magical effect." },
@@ -92,4 +105,13 @@ export function preparedSpellLimit(className: string, level: number, abilityModi
   if (["Paladin", "Ranger"].includes(className)) return Math.max(1, Math.floor(level / 2) + abilityModifier);
   if (["Bard", "Sorcerer", "Warlock"].includes(className)) return Math.max(2, Math.min(15, level + 1));
   return Math.max(1, level + abilityModifier);
+}
+
+export function cantripKnownLimit(className: string, level: number) {
+  const base: Record<string, number> = { Bard: 2, Cleric: 3, Druid: 2, Sorcerer: 4, Warlock: 2, Wizard: 3 };
+  const starting = base[className] ?? 0;
+  if (!starting) return 0;
+  if (className === "Sorcerer") return starting + (level >= 4 ? 1 : 0) + (level >= 10 ? 1 : 0);
+  if (className === "Warlock") return starting + (level >= 4 ? 1 : 0) + (level >= 10 ? 1 : 0);
+  return starting + (level >= 4 ? 1 : 0) + (level >= 10 ? 1 : 0);
 }

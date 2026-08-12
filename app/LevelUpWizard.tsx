@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CLASS_RULES } from "../lib/rules2024";
 import { featureDescription } from "../lib/rulesContent";
+import { SPECIES } from "../lib/builder2024";
 import type { AbilityKey, Hero } from "./page";
 
 const abilities: { key: AbilityKey; label: string }[] = [
@@ -60,6 +61,11 @@ export default function LevelUpWizard({
   const [feat, setFeat] = useState<string>(FEATS[0][0]);
   const averageHp =
     Math.floor(rule.hitDie / 2) + 1 + Math.floor((hero.abilities.con - 10) / 2);
+  const asiPreview = { ...hero.abilities };
+  if (hasAsi && asiMode !== "feat") {
+    if (asiMode === "two") asiPreview[first] = Math.min(20, asiPreview[first] + 2);
+    else { asiPreview[first] = Math.min(20, asiPreview[first] + 1); asiPreview[second] = Math.min(20, asiPreview[second] + 1); }
+  }
   function apply() {
     const hpGain = Math.max(
       1,
@@ -71,6 +77,9 @@ export default function LevelUpWizard({
     );
     const nextAbilities = { ...hero.abilities };
     const newTrackedResources = unlocked.filter((feature) => feature.track && !(hero.resources ?? []).some((resource) => resource.name === feature.name)).map((feature, index) => ({ id: Date.now() + index, name: feature.name, current: 1, max: 1, resetsOn: "long" as const }));
+    const speciesResource = SPECIES[hero.ancestry]?.resource;
+    const nextProficiency = Math.ceil(nextLevel / 4) + 1;
+    const existingResources = (hero.resources ?? []).map((resource) => speciesResource?.name === resource.name && speciesResource.max === "proficiency" ? { ...resource, current: Math.min(nextProficiency, resource.current + Math.max(0, nextProficiency - resource.max)), max: nextProficiency } : resource);
     if (hasAsi && asiMode !== "feat") {
       if (asiMode === "two")
         nextAbilities[first] = Math.min(20, nextAbilities[first] + 2);
@@ -79,12 +88,14 @@ export default function LevelUpWizard({
         nextAbilities[second] = Math.min(20, nextAbilities[second] + 1);
       }
     }
+    const constitutionAdjustment = (Math.floor((nextAbilities.con - 10) / 2) - Math.floor((hero.abilities.con - 10) / 2)) * nextLevel;
+    const totalHpGain = hpGain + constitutionAdjustment;
     onApply({
       level: nextLevel,
       advancementMethod: method,
       abilities: nextAbilities,
-      maxHp: hero.maxHp + hpGain,
-      hp: hero.hp + hpGain,
+      maxHp: hero.maxHp + totalHpGain,
+      hp: hero.hp + totalHpGain,
       maxHitDice: nextLevel,
       hitDice: hero.hitDice + 1,
       xp: method === "xp" ? Math.max(hero.xp, XP[nextLevel - 1]) : hero.xp,
@@ -94,7 +105,7 @@ export default function LevelUpWizard({
           level: nextLevel,
           date: new Date().toISOString(),
           method,
-          hpGain,
+          hpGain: totalHpGain,
           abilityChanges: hasAsi
             ? asiMode === "feat"
               ? `Feat: ${feat}`
@@ -115,7 +126,7 @@ export default function LevelUpWizard({
               },
             ]
           : hero.feats,
-      resources: [...(hero.resources ?? []), ...newTrackedResources],
+      resources: [...existingResources, ...newTrackedResources],
       classes: currentClasses.some((entry) => entry.name === advancementClass)
         ? currentClasses.map((entry) => entry.name === advancementClass ? { ...entry, level: entry.level + 1 } : entry)
         : [...currentClasses, { name: advancementClass, level: 1, subclass: "" }],
@@ -288,6 +299,7 @@ export default function LevelUpWizard({
                 </label>
               )}
             </div>}
+            {asiMode !== "feat" && <div className="asi-impact-preview"><b>Live improvement preview</b>{abilities.filter((ability) => asiPreview[ability.key] !== hero.abilities[ability.key]).map((ability) => <span key={ability.key}>{ability.label}: {hero.abilities[ability.key]} → {asiPreview[ability.key]} · modifier {Math.floor((hero.abilities[ability.key] - 10) / 2) >= 0 ? "+" : ""}{Math.floor((hero.abilities[ability.key] - 10) / 2)} → {Math.floor((asiPreview[ability.key] - 10) / 2) >= 0 ? "+" : ""}{Math.floor((asiPreview[ability.key] - 10) / 2)}</span>)}{asiPreview.con !== hero.abilities.con && <em>Constitution modifier changes retroactively adjust maximum HP across all {nextLevel} character levels.</em>}</div>}
           </section>
         )}
         {!hasAsi && <p className="asi-notice">This class level does not grant an Ability Score Improvement. When one is unlocked, this screen shows the +2, +1/+1, and feat controls before you confirm.</p>}

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cinzel, Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -10,6 +10,12 @@ export const metadata: Metadata = {
   description: "Create heroes. Shape legends. Roll destiny.",
   other: { "codex-preview": "development" },
   manifest: "/manifest.webmanifest",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
   themeColor: "#6d4c9f",
 };
 

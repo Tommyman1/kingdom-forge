@@ -49,6 +49,27 @@ export const CLASS_RULES: Record<string, ClassRule> = {
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 
+export const CLASS_SAVES: Record<string, [string, string]> = {
+  Barbarian: ["str", "con"], Bard: ["dex", "cha"], Cleric: ["wis", "cha"], Druid: ["int", "wis"],
+  Fighter: ["str", "con"], Monk: ["str", "dex"], Paladin: ["wis", "cha"], Ranger: ["str", "dex"],
+  Rogue: ["dex", "int"], Sorcerer: ["con", "cha"], Warlock: ["wis", "cha"], Wizard: ["int", "wis"],
+};
+
+export const CLASS_SKILLS: Record<string, { count: number; choices: string[] }> = {
+  Barbarian: { count: 2, choices: ["Animal Handling", "Athletics", "Intimidation", "Nature", "Perception", "Survival"] },
+  Bard: { count: 3, choices: ["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception", "History", "Insight", "Intimidation", "Investigation", "Medicine", "Nature", "Perception", "Performance", "Persuasion", "Religion", "Sleight of Hand", "Stealth", "Survival"] },
+  Cleric: { count: 2, choices: ["History", "Insight", "Medicine", "Persuasion", "Religion"] },
+  Druid: { count: 2, choices: ["Animal Handling", "Arcana", "Insight", "Medicine", "Nature", "Perception", "Religion", "Survival"] },
+  Fighter: { count: 2, choices: ["Acrobatics", "Animal Handling", "Athletics", "History", "Insight", "Intimidation", "Perception", "Persuasion", "Survival"] },
+  Monk: { count: 2, choices: ["Acrobatics", "Athletics", "History", "Insight", "Religion", "Stealth"] },
+  Paladin: { count: 2, choices: ["Athletics", "Insight", "Intimidation", "Medicine", "Persuasion", "Religion"] },
+  Ranger: { count: 3, choices: ["Animal Handling", "Athletics", "Insight", "Investigation", "Nature", "Perception", "Stealth", "Survival"] },
+  Rogue: { count: 4, choices: ["Acrobatics", "Athletics", "Deception", "Insight", "Intimidation", "Investigation", "Perception", "Performance", "Persuasion", "Sleight of Hand", "Stealth"] },
+  Sorcerer: { count: 2, choices: ["Arcana", "Deception", "Insight", "Intimidation", "Persuasion", "Religion"] },
+  Warlock: { count: 2, choices: ["Arcana", "Deception", "History", "Intimidation", "Investigation", "Nature", "Religion"] },
+  Wizard: { count: 2, choices: ["Arcana", "History", "Insight", "Investigation", "Medicine", "Nature", "Religion"] },
+};
+
 export function attacksPerAction(className: string, level: number) {
   if (className === "Fighter") return level >= 20 ? 4 : level >= 11 ? 3 : level >= 5 ? 2 : 1;
   return ["Barbarian", "Monk", "Paladin", "Ranger"].includes(className) && level >= 5 ? 2 : 1;
