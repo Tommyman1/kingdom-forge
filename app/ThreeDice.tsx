@@ -64,17 +64,28 @@ function faceNumber(value: number, sides: number, gold: boolean) {
 function addFaceNumbers(group: THREE.Group, geometry: THREE.BufferGeometry, sides: number, result: number, geometries: THREE.BufferGeometry[], materials: THREE.Material[], textures: THREE.Texture[]) {
   const flat = geometry.index ? geometry.toNonIndexed() : geometry;
   const position = flat.getAttribute("position");
-  const faces: THREE.Vector3[] = [];
+  const faces: Array<{ normal: THREE.Vector3; vertices: THREE.Vector3[] }> = [];
   for (let index = 0; index < position.count; index += 3) {
-    const center = new THREE.Vector3(
-      (position.getX(index) + position.getX(index + 1) + position.getX(index + 2)) / 3,
-      (position.getY(index) + position.getY(index + 1) + position.getY(index + 2)) / 3,
-      (position.getZ(index) + position.getZ(index + 1) + position.getZ(index + 2)) / 3,
+    const vertices = [0, 1, 2].map((offset) =>
+      new THREE.Vector3(
+        position.getX(index + offset),
+        position.getY(index + offset),
+        position.getZ(index + offset),
+      ),
     );
-    const normal = center.clone().normalize();
-    if (!faces.some((item) => item.angleTo(normal) < 0.08)) faces.push(normal);
+    const triangleCenter = vertices.reduce((sum, vertex) => sum.add(vertex), new THREE.Vector3()).multiplyScalar(1 / 3);
+    const normal = vertices[1].clone().sub(vertices[0]).cross(vertices[2].clone().sub(vertices[0])).normalize();
+    if (normal.dot(triangleCenter) < 0) normal.multiplyScalar(-1);
+    let face = faces.find((item) => item.normal.angleTo(normal) < 0.035);
+    if (!face) {
+      face = { normal, vertices: [] };
+      faces.push(face);
+    }
+    vertices.forEach((vertex) => {
+      if (!face!.vertices.some((item) => item.distanceToSquared(vertex) < 0.000001)) face!.vertices.push(vertex);
+    });
   }
-  faces.forEach((normal, index) => {
+  faces.forEach(({ normal, vertices }, index) => {
     const value = index === 0 ? result : ((index - 1) % sides) + 1;
     const label = faceNumber(value, sides, value === result);
     materials.push(label.material); textures.push(label.texture);
@@ -82,10 +93,13 @@ function addFaceNumbers(group: THREE.Group, geometry: THREE.BufferGeometry, side
     const planeGeometry = new THREE.PlaneGeometry(scale, scale);
     geometries.push(planeGeometry);
     const plane = new THREE.Mesh(planeGeometry, label.material);
-    plane.position.copy(normal.clone().multiplyScalar(sides === 6 ? 0.735 : 1.055));
+    const faceCenter = vertices.reduce((sum, vertex) => sum.add(vertex), new THREE.Vector3()).multiplyScalar(1 / vertices.length);
+    plane.position.copy(faceCenter).addScaledVector(normal, 0.008);
     plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+    plane.renderOrder = 4;
     group.add(plane);
   });
+  if (flat !== geometry) flat.dispose();
 }
 
 export default function ThreeDice({
@@ -105,20 +119,32 @@ export default function ThreeDice({
     const geometries: THREE.BufferGeometry[] = [];
     const materials: THREE.Material[] = [];
     const textures: THREE.Texture[] = [];
+    let resizeObserver: ResizeObserver | null = null;
     try {
-      const width = Math.min(1100, Math.max(360, window.innerWidth - 16));
-      const height = Math.min(760, Math.max(420, window.innerHeight * 0.76));
       renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
         powerPreference: "high-performance",
       });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7));
-      renderer.setSize(width, height, false);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       container.appendChild(renderer.domElement);
+      const bounds = container.getBoundingClientRect();
+      const width = Math.max(1, Math.round(bounds.width));
+      const height = Math.max(1, Math.round(bounds.height));
+      renderer.setSize(width, height, false);
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 100);
+      const resize = () => {
+        const next = container.getBoundingClientRect();
+        const nextWidth = Math.max(1, Math.round(next.width));
+        const nextHeight = Math.max(1, Math.round(next.height));
+        renderer!.setSize(nextWidth, nextHeight, false);
+        camera.aspect = nextWidth / nextHeight;
+        camera.updateProjectionMatrix();
+      };
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(container);
       scene.add(new THREE.HemisphereLight(0xe8d8ff, 0x110818, 2.7));
       const key = new THREE.DirectionalLight(0xffd56c, 5);
       key.position.set(4, 5, 7);
@@ -140,6 +166,9 @@ export default function ThreeDice({
           roughness: 0.3,
           metalness: 0.38,
           flatShading: true,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
         });
         materials.push(material);
         const mesh = new THREE.Mesh(geometry, material);
@@ -148,14 +177,15 @@ export default function ThreeDice({
           color: dieResult.value === dieResult.sides ? 0xffe07c : 0xd9ae4d,
           transparent: true,
           opacity: 0.9,
+          depthWrite: false,
         });
         materials.push(edgeMaterial);
-        group.add(
-          new THREE.LineSegments(
-            new THREE.EdgesGeometry(geometry),
-            edgeMaterial,
-          ),
-        );
+        const edgeGeometry = new THREE.EdgesGeometry(geometry, 1);
+        geometries.push(edgeGeometry);
+        const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+        edges.scale.setScalar(1.0015);
+        edges.renderOrder = 3;
+        group.add(edges);
         addFaceNumbers(group, geometry, dieResult.sides, dieResult.value, geometries, materials, textures);
         const column = index % columns;
         const row = Math.floor(index / columns);
@@ -195,6 +225,7 @@ export default function ThreeDice({
       frame = requestAnimationFrame(animate);
       return () => {
         cancelAnimationFrame(frame);
+        resizeObserver?.disconnect();
         geometries.forEach((item) => item.dispose());
         materials.forEach((item) => item.dispose());
         textures.forEach((item) => item.dispose());
@@ -205,6 +236,7 @@ export default function ThreeDice({
       setFallback(true);
       return () => {
         cancelAnimationFrame(frame);
+        resizeObserver?.disconnect();
         renderer?.dispose();
         renderer?.domElement.remove();
       };

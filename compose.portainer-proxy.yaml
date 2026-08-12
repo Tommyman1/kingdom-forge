@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: kingdom-forge:2.5.0
+    image: kingdom-forge:2.5.1
     container_name: kingdom-forge
     restart: unless-stopped
     environment:
