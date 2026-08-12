@@ -1,4 +1,4 @@
-# Kingdom Forge 2.4.1 — Portainer installation
+# Kingdom Forge 2.5 — Portainer installation
 
 Kingdom Forge is designed to keep all persistent information in the named Docker volume `kingdom-forge-data`. Rebuilding or replacing the container does not delete accounts, characters, campaigns, or scheduled database backups.
 

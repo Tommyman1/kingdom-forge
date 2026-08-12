@@ -148,6 +148,7 @@ export type Hero = {
   backgroundGrantedFeat?: string;
   backgroundTool?: string;
   backgroundAbilityBonuses?: Partial<Record<AbilityKey, number>>;
+  group?: string;
 };
 
 type HeroSnapshot = { id: number; heroId: number; savedAt: string; hero: Hero };
@@ -432,6 +433,7 @@ export default function Home() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [xpAward, setXpAward] = useState(0);
+  const [draggedHeroId, setDraggedHeroId] = useState<number | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const hero = useMemo(
     () => heroes.find((item) => item.id === selectedId) ?? heroes[0],
@@ -529,6 +531,28 @@ export default function Home() {
     setHeroes((items) =>
       items.map((item) => (item.id === hero.id ? { ...item, ...patch } : item)),
     );
+  }
+  function moveHero(heroId: number, direction: -1 | 1) {
+    setHeroes((items) => {
+      const from = items.findIndex((item) => item.id === heroId);
+      const to = Math.max(0, Math.min(items.length - 1, from + direction));
+      if (from < 0 || from === to) return items;
+      const next = [...items]; const [moved] = next.splice(from, 1); next.splice(to, 0, moved); return next;
+    });
+  }
+  function dropHero(targetId: number) {
+    if (draggedHeroId === null || draggedHeroId === targetId) return setDraggedHeroId(null);
+    setHeroes((items) => {
+      const from = items.findIndex((item) => item.id === draggedHeroId);
+      const to = items.findIndex((item) => item.id === targetId);
+      if (from < 0 || to < 0) return items;
+      const next = [...items]; const [moved] = next.splice(from, 1); next.splice(to, 0, moved); return next;
+    });
+    setDraggedHeroId(null);
+  }
+  function chooseHeroGroup() {
+    const value = window.prompt("Group name (for example: Wall Gloria or One-shots). Leave blank for no group.", hero.group ?? "");
+    if (value !== null) updateHero({ group: value.trim() || undefined });
   }
   function createHero() {
     const next = makeHero();
@@ -712,7 +736,7 @@ export default function Home() {
     if (diceSound) playDiceSound();
     if (diceAnimation) {
       setAnimatedRoll({ total, dice: animatedDice.slice(0, 24) });
-      window.setTimeout(() => setAnimatedRoll(null), 2450);
+      window.setTimeout(() => setAnimatedRoll(null), 4400);
     }
   }
 
@@ -838,6 +862,7 @@ export default function Home() {
         </Suspense>
       )}
       {tableMode && <button className="exit-table-mode" onClick={() => setTableMode(false)}>× Exit Table Mode</button>}
+      {!tableMode && view === "characters" && <button className="mobile-table-toggle" onClick={() => { setTableMode(true); setActiveTab("actions"); }}>Table Mode</button>}
       {commandOpen && <div className="command-backdrop" onClick={() => setCommandOpen(false)}><section className="command-palette" onClick={(event) => event.stopPropagation()}><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Search characters and tools…" />{[
         ...(["characters", "campaigns", "compendium", "homebrew", "settings"] as AppView[]).map((target) => ({ label: `Open ${target}`, run: () => setView(target) })),
         ...heroes.map((item) => ({ label: `Character · ${item.name}`, run: () => { setView("characters"); setSelectedId(item.id); } })),
@@ -940,10 +965,20 @@ export default function Home() {
                 </button>
               </div>
             </header>
+            <div className="character-organizer">
+              <span><b>{hero.group || "Ungrouped"}</b> · drag cards or use the arrows to arrange them</span>
+              <button onClick={() => moveHero(hero.id, -1)} aria-label="Move selected character left">←</button>
+              <button onClick={() => moveHero(hero.id, 1)} aria-label="Move selected character right">→</button>
+              <button onClick={chooseHeroGroup}>Group character</button>
+            </div>
             <div className="character-strip" aria-label="Character list">
               {heroes.map((item) => (
                 <button
                   key={item.id}
+                  draggable
+                  onDragStart={() => setDraggedHeroId(item.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => dropHero(item.id)}
                   className={`hero-chip ${hero.id === item.id ? "selected" : ""}`}
                   onClick={() => {
                     setSelectedId(item.id);
@@ -956,6 +991,7 @@ export default function Home() {
                     <span>
                       Level {item.level} {item.className}
                     </span>
+                    {item.group && <small>{item.group}</small>}
                   </div>
                   <i
                     style={{
@@ -1032,6 +1068,7 @@ export default function Home() {
                           <button onClick={() => { setShowMenu(false); window.print(); }}>Print / Save PDF</button>
                           <button onClick={saveRestorePoint}>Save Restore Point</button>
                           <button onClick={restoreLatest}>Restore Previous</button>
+                          <button onClick={() => { setShowMenu(false); chooseHeroGroup(); }}>Set Character Group</button>
                           <button className="danger" onClick={deleteHero}>
                             Delete
                           </button>
@@ -1859,6 +1896,21 @@ function SpellsTab({
       },
     });
   }
+  function castSpell(spell: Spell) {
+    const innate = speciesSpells.has(spell.name);
+    if (spell.level > 0 && !innate) {
+      const slot = hero.spellSlots[spell.level];
+      if (!slot?.max || slot.used >= slot.max) {
+        window.alert(`No level ${spell.level} spell slots remain. Take a long rest or choose another spell.`);
+        return;
+      }
+      updateHero({
+        spellSlots: { ...hero.spellSlots, [spell.level]: { ...slot, used: slot.used + 1 } },
+        concentration: spellInfo(spell.name).concentration ? true : hero.concentration,
+      });
+    } else if (spellInfo(spell.name).concentration) updateHero({ concentration: true });
+    onRoll(`1d20${signed(prof + casting)}`, spell.name);
+  }
   return (
     <div>
       <div className="spell-summary">
@@ -1937,11 +1989,11 @@ function SpellsTab({
                 <p>{spell.description}</p>
               </span>
               <button
-                onClick={() =>
-                  onRoll(`1d20${signed(prof + casting)}`, spell.name)
-                }
+                className="cast-spell"
+                disabled={spell.level > 0 && !speciesSpells.has(spell.name) && (!hero.spellSlots[spell.level]?.max || hero.spellSlots[spell.level].used >= hero.spellSlots[spell.level].max)}
+                onClick={() => castSpell(spell)}
               >
-                Cast
+                Cast{spell.level > 0 && !speciesSpells.has(spell.name) ? ` · use level ${spell.level} slot` : ""}
               </button>
             </article>
           ))

@@ -1,8 +1,8 @@
 # Kingdom Forge
 
-## Version 2.4.1
+## Version 2.5
 
-Kingdom Forge 2.4.1 is the cumulative, Portainer-ready campaign platform. This patch makes the resource creator and active-effect controls respond to the character card's actual width, preventing the Create Counter button, concentration, and exhaustion controls from clipping in table mode. It retains the complete 2.4 table presentation and every earlier character, campaign, rules, account, backup, homebrew, and animated-dice feature.
+Kingdom Forge 2.5 is the cumulative, Portainer-ready campaign platform. Dice now roll slowly with numbered faces and a longer readable settle; casting automatically consumes the correct spell slot and disables unavailable casts. Mobile spell/combat layouts, portrait-phone Table Mode entry, and laptop Table Mode have been rebuilt. Character cards support persistent drag/arrow ordering and named groups, while the individual-d20 ability method rolls six results and lets the player assign each result exactly once. It retains every earlier character, campaign, rules, account, backup, homebrew, and animated-dice feature.
 
 Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
 

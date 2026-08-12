@@ -51,6 +51,8 @@ export default function GuidedEditor({
   const [scoreMethod, setScoreMethod] = useState<"standard" | "roll" | "d20" | "point">(
     "standard",
   );
+  const [d20Rolls, setD20Rolls] = useState<number[]>([]);
+  const [d20Assignments, setD20Assignments] = useState<Record<AbilityKey, number>>({ str: 0, dex: 1, con: 2, int: 3, wis: 4, cha: 5 });
   const [speciesSkill, setSpeciesSkill] = useState(hero.speciesChoices?.skill ?? "Perception");
   const [speciesSize, setSpeciesSize] = useState(hero.speciesChoices?.size ?? "Medium");
   const [speciesLineage, setSpeciesLineage] = useState(hero.speciesChoices?.lineage ?? "");
@@ -159,6 +161,20 @@ export default function GuidedEditor({
         abilityKeys.map((ability, index) => [ability.key, values[index]]),
       ) as Hero["abilities"],
     }));
+  }
+  function rollD20Pool() {
+    const rolls = Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + 1);
+    setD20Rolls(rolls);
+    assign(rolls);
+    setD20Assignments({ str: 0, dex: 1, con: 2, int: 3, wis: 4, cha: 5 });
+  }
+  function assignD20Roll(ability: AbilityKey, rollIndex: number) {
+    const previous = d20Assignments[ability];
+    const occupied = abilityKeys.find((item) => d20Assignments[item.key] === rollIndex)?.key;
+    const next = { ...d20Assignments, [ability]: rollIndex };
+    if (occupied && occupied !== ability) next[occupied] = previous;
+    setD20Assignments(next);
+    setDraft((current) => ({ ...current, abilities: Object.fromEntries(abilityKeys.map((item) => [item.key, d20Rolls[next[item.key]]])) as Hero["abilities"] }));
   }
   function toggleSpell(name: string) {
     const found = draft.spells.find((spell) => spell.name === name);
@@ -560,7 +576,7 @@ export default function GuidedEditor({
                       setScoreMethod(method);
                       if (method === "standard") assign(STANDARD_ARRAY);
                       if (method === "roll") assign(rollAbilitySet());
-                      if (method === "d20") assign(Array.from({ length: 6 }, () => Math.floor(Math.random() * 20) + 1));
+                      if (method === "d20") rollD20Pool();
                       if (method === "point") assign([8, 8, 8, 8, 8, 8]);
                     }}
                   >
@@ -580,6 +596,13 @@ export default function GuidedEditor({
                 >
                   <span>Points spent</span>
                   <strong>{pointSpent} / 27</strong>
+                </div>
+              )}
+              {scoreMethod === "d20" && (
+                <div className="d20-assignment-pool">
+                  <div><span>Your six rolls</span><b>{d20Rolls.map((roll, index) => <i key={index}>{roll}</i>)}</b></div>
+                  <button type="button" onClick={rollD20Pool}>Roll all six d20s again</button>
+                  <small>Assign every rolled result exactly once. Choosing a used roll automatically swaps it with the previous ability.</small>
                 </div>
               )}
               <div className="ability-assignment">
@@ -605,6 +628,10 @@ export default function GuidedEditor({
                           </option>
                         ))}
                       </select>
+                    ) : scoreMethod === "d20" ? (
+                      <select value={d20Assignments[ability.key]} onChange={(event) => assignD20Roll(ability.key, Number(event.target.value))}>
+                        {d20Rolls.map((roll, index) => <option key={index} value={index}>Roll {index + 1}: {roll}</option>)}
+                      </select>
                     ) : (
                       <div className="ability-roll-input"><input
                         type="number"
@@ -620,7 +647,7 @@ export default function GuidedEditor({
                             },
                           }))
                         }
-                      />{scoreMethod === "d20" && <button type="button" onClick={() => setDraft((current) => ({ ...current, abilities: { ...current.abilities, [ability.key]: Math.floor(Math.random() * 20) + 1 } }))}>Roll d20</button>}</div>
+                      /></div>
                     )}
                     <b>{draft.abilities[ability.key]}</b>
                     <small>

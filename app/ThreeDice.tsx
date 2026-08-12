@@ -36,33 +36,56 @@ function geometryFor(sides: number) {
   return new THREE.IcosahedronGeometry(1.08);
 }
 
-function numberSprite(value: number, gold: boolean) {
+function faceNumber(value: number, sides: number, gold: boolean) {
   const canvas = document.createElement("canvas");
-  canvas.width = 160;
-  canvas.height = 90;
+  canvas.width = 128;
+  canvas.height = 128;
   const context = canvas.getContext("2d")!;
-  context.fillStyle = "#120b1ccc";
-  context.roundRect(12, 12, 136, 66, 24);
-  context.fill();
-  context.strokeStyle = gold ? "#f0c65c" : "#9a77bd";
-  context.lineWidth = 4;
-  context.stroke();
-  context.fillStyle = gold ? "#f5d36f" : "#ffffff";
-  context.font = "700 42px Georgia";
+  context.fillStyle = gold ? "#ffe17b" : "#fffaf0";
+  context.strokeStyle = "#160d20";
+  context.lineWidth = 10;
+  context.font = `700 ${sides > 20 ? 46 : 58}px Georgia`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(String(value), 80, 46);
+  context.strokeText(String(value), 64, 67);
+  context.fillText(String(value), 64, 67);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({
+  const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    depthTest: false,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
   });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(1.18, 0.66, 1);
-  sprite.position.y = 1.45;
-  return { sprite, texture, material };
+  return { texture, material };
+}
+
+function addFaceNumbers(group: THREE.Group, geometry: THREE.BufferGeometry, sides: number, result: number, geometries: THREE.BufferGeometry[], materials: THREE.Material[], textures: THREE.Texture[]) {
+  const flat = geometry.index ? geometry.toNonIndexed() : geometry;
+  const position = flat.getAttribute("position");
+  const faces: THREE.Vector3[] = [];
+  for (let index = 0; index < position.count; index += 3) {
+    const center = new THREE.Vector3(
+      (position.getX(index) + position.getX(index + 1) + position.getX(index + 2)) / 3,
+      (position.getY(index) + position.getY(index + 1) + position.getY(index + 2)) / 3,
+      (position.getZ(index) + position.getZ(index + 1) + position.getZ(index + 2)) / 3,
+    );
+    const normal = center.clone().normalize();
+    if (!faces.some((item) => item.angleTo(normal) < 0.08)) faces.push(normal);
+  }
+  faces.forEach((normal, index) => {
+    const value = index === 0 ? result : ((index - 1) % sides) + 1;
+    const label = faceNumber(value, sides, value === result);
+    materials.push(label.material); textures.push(label.texture);
+    const scale = sides >= 20 ? 0.36 : sides >= 12 ? 0.42 : sides >= 8 ? 0.48 : 0.58;
+    const planeGeometry = new THREE.PlaneGeometry(scale, scale);
+    geometries.push(planeGeometry);
+    const plane = new THREE.Mesh(planeGeometry, label.material);
+    plane.position.copy(normal.clone().multiplyScalar(sides === 6 ? 0.735 : 1.055));
+    plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+    group.add(plane);
+  });
 }
 
 export default function ThreeDice({
@@ -133,13 +156,7 @@ export default function ThreeDice({
             edgeMaterial,
           ),
         );
-        const label = numberSprite(
-          dieResult.value,
-          dieResult.value === dieResult.sides,
-        );
-        textures.push(label.texture);
-        materials.push(label.material);
-        group.add(label.sprite);
+        addFaceNumbers(group, geometry, dieResult.sides, dieResult.value, geometries, materials, textures);
         const column = index % columns;
         const row = Math.floor(index / columns);
         group.position.set(
@@ -155,11 +172,11 @@ export default function ThreeDice({
       });
       const started = performance.now();
       function animate(now: number) {
-        const elapsed = Math.min(1, (now - started) / 2200);
-        const settle = 1 - Math.pow(1 - elapsed, 4);
+        const elapsed = Math.min(1, (now - started) / 3900);
+        const settle = 1 - Math.pow(1 - elapsed, 3);
         groups.forEach((group, index) => {
           const seed = group.userData.seed as number;
-          const spin = (1 - settle) * (11 + (seed % 5));
+          const spin = (1 - settle) * (15 + (seed % 5));
           group.rotation.x = spin * 0.73 + (seed % 7) * 0.22 * settle;
           group.rotation.y = spin + (seed % 11) * 0.19 * settle;
           group.rotation.z = spin * 0.31 + (seed % 3) * 0.2 * settle;
