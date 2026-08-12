@@ -3827,10 +3827,32 @@ input, select, textarea, button { min-width: 0; }
   .condition-tracker > button, .exhaustion-control { justify-content: center; min-height: 40px; }
 }
 
+/* The character sheet can be narrower than the browser in desktop/table layouts. */
+@container character-sheet (max-width: 900px) {
+  .resource-manager { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .resource-manager > div:first-child,
+  .resource-manager .resource-name-field,
+  .resource-manager .resource-list,
+  .resource-manager > .primary { grid-column: 1 / -1; }
+  .resource-manager > .primary { width: 100%; }
+  .condition-tracker { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; }
+  .condition-tracker > div,
+  .condition-tracker > label:not(.exhaustion-control) { grid-column: 1 / -1; }
+  .condition-tracker > button,
+  .condition-tracker .exhaustion-control { min-width: 0; min-height: 42px; justify-content: center; }
+}
+
 @container character-sheet (max-width: 390px) {
   .death-saves { grid-template-columns: 1fr 1fr; gap: 9px 12px; }
   .death-saves > span { grid-column: 1 / -1; text-align: center; }
   .death-saves label { display: flex; align-items: center; justify-content: center; }
+  .condition-tracker { grid-template-columns: 1fr; }
+  .condition-tracker > * { grid-column: 1 !important; width: 100%; }
+}
+
+@container character-sheet (max-width: 520px) {
+  .resource-manager { grid-template-columns: 1fr; }
+  .resource-manager > * { grid-column: 1 !important; }
   .condition-tracker { grid-template-columns: 1fr; }
   .condition-tracker > * { grid-column: 1 !important; width: 100%; }
 }

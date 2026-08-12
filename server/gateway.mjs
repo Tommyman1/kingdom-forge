@@ -108,7 +108,7 @@ app.get("/api/session", (request, response) => {
       db.prepare("SELECT COUNT(*) count FROM users").get().count === 0,
   });
 });
-app.get("/health", (_request, response) => response.json({ status: "ok", version: "2.4.0", time: new Date().toISOString() }));
+app.get("/health", (_request, response) => response.json({ status: "ok", version: "2.4.1", time: new Date().toISOString() }));
 app.get("/ready", (_request, response) => {
   try {
     db.prepare("SELECT 1 value").get();
@@ -304,7 +304,7 @@ app.get("/api/admin/backup", requireUser, (request, response) => {
 app.get("/api/admin/diagnostics", requireUser, (request, response) => {
   if (request.user.role !== "admin") return response.status(403).json({ error: "Administrator access required" });
   const databasePath = path.join(dataDir, "kingdom-forge.sqlite");
-  response.json({ version: "2.4.0", schema: 2, databaseBytes: fs.statSync(databasePath).size, users: db.prepare("SELECT COUNT(*) count FROM users").get().count, campaigns: db.prepare("SELECT COUNT(*) count FROM campaigns").get().count, events: db.prepare("SELECT COUNT(*) count FROM campaign_events").get().count, journalMode: db.pragma("journal_mode", { simple: true }), dataDir });
+  response.json({ version: "2.4.1", schema: 2, databaseBytes: fs.statSync(databasePath).size, users: db.prepare("SELECT COUNT(*) count FROM users").get().count, campaigns: db.prepare("SELECT COUNT(*) count FROM campaigns").get().count, events: db.prepare("SELECT COUNT(*) count FROM campaign_events").get().count, journalMode: db.pragma("journal_mode", { simple: true }), dataDir });
 });
 app.get("/api/admin/audit", requireUser, (request, response) => {
   if (request.user.role !== "admin") return response.status(403).json({ error: "Administrator access required" });
