@@ -1,8 +1,8 @@
 # Kingdom Forge
 
-## Version 2.5.4
+## Version 2.5.5
 
-Kingdom Forge 2.5.4 is the cumulative, Portainer-ready campaign platform. Death saves are centered on desktop and mobile with true circular touch controls, HP controls remain circular, and the mobile combat and spell summaries use balanced responsive grids. It retains the longer animated result hold, group sorting, corrected Table Mode, camera-facing rolled dice, and every earlier character, campaign, rules, account, backup, homebrew, and animated-dice feature.
+Kingdom Forge 2.5.5 is the cumulative, Portainer-ready campaign platform. The final interface pass keeps all mobile counter controls circular, gives XP entry a gold focus treatment, applies the centered mobile death-save composition to laptops, restores mobile Level Up, and adds fast amount-based damage and healing alongside the one-point HP controls. It retains every earlier responsive, grouping, Table Mode, dice, character, campaign, rules, account, backup, and homebrew feature.
 
 Start with [PORTAINER.md](PORTAINER.md). No predetermined administrator password exists: the first account registered becomes the administrator.
 

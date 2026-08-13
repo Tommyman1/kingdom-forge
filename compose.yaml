@@ -1,7 +1,7 @@
 services:
   kingdom-forge:
     build: .
-    image: kingdom-forge:2.5.4
+    image: kingdom-forge:2.5.5
     container_name: kingdom-forge
     restart: unless-stopped
     environment:

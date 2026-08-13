@@ -433,6 +433,7 @@ export default function Home() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [xpAward, setXpAward] = useState(0);
+  const [hpChange, setHpChange] = useState(1);
   const [draggedHeroId, setDraggedHeroId] = useState<number | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const hero = useMemo(
@@ -1053,7 +1054,7 @@ export default function Home() {
                   </div>
                   <div className="sheet-tools">
                     <button
-                      className="ghost"
+                      className="ghost mobile-level-up"
                       onClick={() => setShowLevelUp(true)}
                     >
                       Level Up
@@ -1137,6 +1138,14 @@ export default function Home() {
                         {hero.hp} <small>/ {hero.maxHp}</small>
                       </strong>
                       <button onClick={() => applyHp(1)}>＋</button>
+                    </div>
+                    <div className="hp-quick-change">
+                      <label>
+                        <span>HP AMOUNT</span>
+                        <input type="number" inputMode="numeric" min="1" value={hpChange} onChange={(event) => setHpChange(Math.max(1, Number(event.target.value) || 1))} aria-label="Hit point amount" />
+                      </label>
+                      <button className="damage" onClick={() => applyHp(-hpChange)}>Take Damage</button>
+                      <button className="heal" onClick={() => applyHp(hpChange)}>Heal</button>
                     </div>
                     <div className="hp-track">
                       <i
